@@ -34,24 +34,77 @@ function App(){
   const [newSubj,setNewSubj]=useState('');
   const [selRev,setSelRev]=useState(null);
   const [month,setMonth]=useState(new Date());
-  const [escDate,setEscDate]=useState('');
-  const [escType,setEscType]=useState('branca');
   const [form,setForm]=useState({topic:'',mins:'',conf:3});
   const [taskForm,setTaskForm]=useState({title:'',desc:'',deadline:'',priority:'media'});
   const [expandedTask,setExpandedTask]=useState(null);
+  
+  // Escala form states
+  const [escForm,setEscForm]=useState({
+    date:'',
+    tipo:'guarda', // guarda ou limpeza
+    turma:'branca',
+    posto:'',
+    quarto:1,
+    obs:''
+  });
+  const [selectedEscala,setSelectedEscala]=useState(null);
+  const [escalaTab,setEscalaTab]=useState('calendario');
 
   const INT=[1,7,15,30,45];
   const SUBJ=['Comunicação e Expressão','Didática','Lógica','Metodologia Científica','Psicologia','Chefia e Liderança','Escrituração Profissional','TIC','Gestão Contemporânea','Gestão de Pessoas','Direito Administrativo','Direito Adm. Disciplinar Militar','Direito Penal','Direito Penal Militar','Doutrina de Polícia Ostensiva'];
   const RANKS=[{n:'E',min:0,max:299,c:'#6B7280',t:'Iniciante'},{n:'D',min:300,max:799,c:'#10B981',t:'Promissor'},{n:'C',min:800,max:1799,c:'#3B82F6',t:'Competente'},{n:'B',min:1800,max:3499,c:'#8B5CF6',t:'Elite'},{n:'A',min:3500,max:5999,c:'#EF4444',t:'Nacional'},{n:'S',min:6000,max:99999,c:'#F59E0B',t:'Shadow Monarch'}];
   const PRIORITIES={alta:{label:'Alta',color:'bg-red-500',border:'border-red-500',icon:'AlertTriangle'},media:{label:'Média',color:'bg-amber-500',border:'border-amber-500',icon:'Minus'},baixa:{label:'Baixa',color:'bg-blue-500',border:'border-blue-500',icon:'ChevronDown'}};
 
+  // Turmas
+  const TURMAS=[
+    {id:'branca',nome:'Branca',cor:'bg-white text-gray-900 border-white'},
+    {id:'preta',nome:'Preta',cor:'bg-gray-900 text-white border-gray-500'},
+    {id:'vermelha',nome:'Vermelha',cor:'bg-red-600 text-white border-red-400'},
+    {id:'roxa',nome:'Roxa',cor:'bg-purple-600 text-white border-purple-400'}
+  ];
+
+  // Postos de Guarda - Atual
+  const POSTOS_ATUAL=[
+    {id:'sentinela_rancho',nome:'Sentinela Rancho',icon:'UtensilsCrossed'},
+    {id:'sentinela_piscina',nome:'Sentinela Piscina',icon:'Waves'},
+    {id:'plantao',nome:'Plantão',icon:'Phone'},
+    {id:'permanencia',nome:'Permanência',icon:'Clock'}
+  ];
+
+  // Postos de Guarda - Próximo mês
+  const POSTOS_PROXIMO=[
+    {id:'portao_1',nome:'Portão 1',icon:'DoorOpen'},
+    {id:'portao_2',nome:'Portão 2',icon:'DoorClosed'},
+    {id:'motorizada_enc',nome:'Motorizada (Encarregado)',icon:'Car'},
+    {id:'motorizada_mot',nome:'Motorizada (Motorista)',icon:'Truck'},
+    {id:'adjunto_dia',nome:'Adjunto de Dia',icon:'UserCheck'},
+    {id:'aux_cmt_guarda',nome:'Aux Cmt da Guarda',icon:'Shield'}
+  ];
+
+  // Limpezas (Fiscal)
+  const LIMPEZAS=[
+    {id:'banheiro',nome:'Banheiro',icon:'Bath'},
+    {id:'daxv',nome:'DAXV',icon:'Sparkles'},
+    {id:'crossfit',nome:'Crossfit',icon:'Dumbbell'},
+    {id:'musculacao',nome:'Musculação',icon:'Trophy'},
+    {id:'lavanderia',nome:'Lavanderia',icon:'Shirt'}
+  ];
+
+  // Quartos de hora (2h cada, ciclam: 1°→2°→3°→1°→2°→3°...)
+  const QUARTOS=[
+    {id:1,nome:'1º Quarto',horarios:'07-09 | 13-15 | 19-21 | 01-03'},
+    {id:2,nome:'2º Quarto',horarios:'09-11 | 15-17 | 21-23 | 03-05'},
+    {id:3,nome:'3º Quarto',horarios:'11-13 | 17-19 | 23-01 | 05-07'}
+  ];
+
   const [data,setData]=useState({items:[],xp:0,hp:100,lv:1,debt:0});
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
   const [tasks,setTasks]=useState([]);
-  const [esc,setEsc]=useState({});
+  const [escalas,setEscalas]=useState([]);
+  const [config,setConfig]=useState({usarPostosNovos:false});
 
-  useEffect(()=>{const s=localStorage.getItem('hv4');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.esc)setEsc(p.esc);}},[]);
-  useEffect(()=>{localStorage.setItem('hv4',JSON.stringify({data,ex,tasks,esc}));},[data,ex,tasks,esc]);
+  useEffect(()=>{const s=localStorage.getItem('hv5');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.escalas)setEscalas(p.escalas);if(p.config)setConfig(p.config);}},[]);
+  useEffect(()=>{localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config]);
 
   // Auto-delete completed tasks after 10 minutes & check overdue tasks
   useEffect(()=>{
@@ -60,14 +113,10 @@ function App(){
       setTasks(prev=>{
         let newTasks=[...prev];
         let xpLoss=0;
-        
         newTasks=newTasks.filter(t=>{
-          // Remove tasks completed for more than 10 minutes
           if(t.done&&t.completedAt&&(now-t.completedAt)>600000)return false;
           return true;
         });
-        
-        // Check overdue tasks (not done, past deadline)
         newTasks=newTasks.map(t=>{
           if(!t.done&&t.deadline&&!t.penalized){
             const deadline=new Date(t.deadline+'T23:59:59');
@@ -78,23 +127,23 @@ function App(){
           }
           return t;
         });
-        
         if(xpLoss>0){
           setData(d=>({...d,xp:Math.max(0,d.xp-xpLoss)}));
           alert(`PRAZO PERDIDO! -${xpLoss} XP`);
         }
-        
         return newTasks;
       });
-    },10000); // Check every 10 seconds
+    },10000);
     return()=>clearInterval(interval);
   },[]);
 
   const today=()=>new Date().toISOString().split('T')[0];
   const addD=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];};
   const fmtD=(d)=>new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  const fmtDFull=(d)=>new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   const daysTo=(d)=>Math.ceil((new Date(d+'T00:00:00')-new Date(today()+'T00:00:00'))/86400000);
-  const onDuty=(d)=>esc[d]!==undefined;
+  const hasEscala=(d)=>escalas.some(e=>e.date===d);
+  const getEscalaByDate=(d)=>escalas.find(e=>e.date===d);
   const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
   const dmg=(a)=>setData(p=>{const h=Math.max(0,p.hp-a);if(h===0&&p.lv>1){alert('LEVEL DOWN!');return{...p,hp:100,lv:p.lv-1,xp:Math.max(0,p.xp-300)};}return{...p,hp:h};});
 
@@ -109,12 +158,11 @@ function App(){
   const skipRev=()=>{dmg(5);setData(p=>({...p,xp:Math.max(0,p.xp-25),debt:p.debt+20}));setModal('punish');};
   const doPush=()=>{setData(p=>({...p,debt:0,xp:p.xp+10}));heal(5);setModal(null);};
 
-  const togEx=(d)=>{if(onDuty(d))return;let h=[...ex.hist];const i=h.findIndex(x=>x.d===d);let xc=0;if(i>=0){h[i]={...h[i],ok:!h[i].ok};xc=h[i].ok?40:-40;if(h[i].ok)heal(10);}else{h=[{d,ok:true},...h];xc=40;heal(10);}let s=0;for(let j=0;j<100;j++){const dd=addD(today(),-j);if(onDuty(dd))continue;const e=h.find(x=>x.d===dd);if(e?.ok)s++;else break;}setEx({hist:h,streak:s,best:Math.max(ex.best,s)});setData(p=>({...p,xp:Math.max(0,p.xp+xc)}));};
-  const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:onDuty(ds),day:x.getDate()});}return d;};
+  const togEx=(d)=>{if(hasEscala(d))return;let h=[...ex.hist];const i=h.findIndex(x=>x.d===d);let xc=0;if(i>=0){h[i]={...h[i],ok:!h[i].ok};xc=h[i].ok?40:-40;if(h[i].ok)heal(10);}else{h=[{d,ok:true},...h];xc=40;heal(10);}let s=0;for(let j=0;j<100;j++){const dd=addD(today(),-j);if(hasEscala(dd))continue;const e=h.find(x=>x.d===dd);if(e?.ok)s++;else break;}setEx({hist:h,streak:s,best:Math.max(ex.best,s)});setData(p=>({...p,xp:Math.max(0,p.xp+xc)}));};
+  const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:hasEscala(ds),day:x.getDate()});}return d;};
 
   const addTask=()=>{
     if(!taskForm.title)return;
-    const xpGain=taskForm.priority==='alta'?15:taskForm.priority==='media'?10:5;
     setTasks(p=>[{id:Date.now(),title:taskForm.title,desc:taskForm.desc,deadline:taskForm.deadline,priority:taskForm.priority,done:false,penalized:false,createdAt:Date.now()},...p]);
     setTaskForm({title:'',desc:'',deadline:'',priority:'media'});
     setModal(null);
@@ -124,13 +172,11 @@ function App(){
     setTasks(p=>p.map(t=>{
       if(t.id===id){
         if(!t.done){
-          // Completing task - give XP based on priority
           const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
           setData(d=>({...d,xp:d.xp+xpGain}));
           heal(5);
           return{...t,done:true,completedAt:Date.now()};
         }else{
-          // Uncompleting task - remove XP
           const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
           setData(d=>({...d,xp:Math.max(0,d.xp-xpGain)}));
           return{...t,done:false,completedAt:null};
@@ -144,10 +190,10 @@ function App(){
     if(done)return'text-gray-500';
     if(!deadline)return'text-gray-400';
     const days=daysTo(deadline);
-    if(days<0)return'text-red-500 font-bold'; // Overdue
-    if(days<=1)return'text-red-400'; // 1 day or less
-    if(days<=3)return'text-amber-400'; // 2-3 days
-    return'text-green-400'; // More than 3 days
+    if(days<0)return'text-red-500 font-bold';
+    if(days<=1)return'text-red-400';
+    if(days<=3)return'text-amber-400';
+    return'text-green-400';
   };
 
   const getDeadlineText=(deadline,done)=>{
@@ -160,21 +206,65 @@ function App(){
   };
 
   const monthDays=()=>{const y=month.getFullYear(),m=month.getMonth();const f=new Date(y,m,1),l=new Date(y,m+1,0);const d=[];for(let i=0;i<f.getDay();i++)d.push(null);for(let i=1;i<=l.getDate();i++)d.push({day:i,date:new Date(y,m,i).toISOString().split('T')[0]});return d;};
-  const addEsc=()=>{if(!escDate)return;setEsc(p=>({...p,[escDate]:escType}));setModal(null);setEscDate('');};
   
-  const getEscStyle=(t,isCalendar=false)=>{
-    const styles={
-      branca:{bg:'bg-white',text:'text-gray-900',border:'border-white',glow:'shadow-white/50'},
-      preta:{bg:'bg-gray-900',text:'text-white',border:'border-gray-400',glow:'shadow-gray-400/50'},
-      vermelha:{bg:'bg-red-600',text:'text-white',border:'border-red-400',glow:'shadow-red-500/50'},
-      roxa:{bg:'bg-purple-600',text:'text-white',border:'border-purple-400',glow:'shadow-purple-500/50'}
+  // Escala functions
+  const addEscala=()=>{
+    if(!escForm.date||!escForm.posto)return;
+    const newEsc={
+      id:Date.now(),
+      date:escForm.date,
+      tipo:escForm.tipo,
+      turma:escForm.turma,
+      posto:escForm.posto,
+      quarto:escForm.quarto,
+      obs:escForm.obs
     };
-    return styles[t]||{bg:'bg-gray-800',text:'text-gray-400',border:'border-gray-700',glow:''};
+    setEscalas(p=>[...p,newEsc]);
+    setEscForm({date:'',tipo:'guarda',turma:'branca',posto:'',quarto:1,obs:''});
+    setModal(null);
   };
-  
+
+  const deleteEscala=(id)=>{
+    setEscalas(p=>p.filter(e=>e.id!==id));
+    setSelectedEscala(null);
+  };
+
+  const getPostoNome=(postoId)=>{
+    const allPostos=[...POSTOS_ATUAL,...POSTOS_PROXIMO,...LIMPEZAS];
+    return allPostos.find(p=>p.id===postoId)?.nome||postoId;
+  };
+
+  const getPostoIcon=(postoId)=>{
+    const allPostos=[...POSTOS_ATUAL,...POSTOS_PROXIMO,...LIMPEZAS];
+    return allPostos.find(p=>p.id===postoId)?.icon||'Circle';
+  };
+
+  const getTurmaCor=(turmaId)=>{
+    return TURMAS.find(t=>t.id===turmaId)?.cor||'bg-gray-700 text-white';
+  };
+
+  const getTurmaNome=(turmaId)=>{
+    return TURMAS.find(t=>t.id===turmaId)?.nome||turmaId;
+  };
+
+  const getQuartoInfo=(quartoId)=>{
+    return QUARTOS.find(q=>q.id===quartoId)||{nome:'',horarios:''};
+  };
+
+  const currentPostos=config.usarPostosNovos?POSTOS_PROXIMO:POSTOS_ATUAL;
+
+  const proximasEscalas=escalas
+    .filter(e=>e.date>=today())
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))
+    .slice(0,5);
+
+  const escalasMes=escalas.filter(e=>{
+    const dt=new Date(e.date+'T00:00:00');
+    return dt.getMonth()===month.getMonth()&&dt.getFullYear()===month.getFullYear();
+  });
+
   const stageName=(s)=>['1ª Rev','2ª Rev','3ª Rev','4ª Rev','5ª Rev'][s]||'Manut.';
 
-  // Sort tasks: not done first (by priority then deadline), then done
   const sortedTasks=[...tasks].sort((a,b)=>{
     if(a.done!==b.done)return a.done?1:-1;
     const prioOrder={alta:0,media:1,baixa:2};
@@ -226,7 +316,7 @@ function App(){
 
       {modal==='task'&&(
         <div className="modal" onClick={()=>setModal(null)}>
-          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50 max-h-[90vh] overflow-auto" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVA MISSÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
             <div className="space-y-4">
               <input value={taskForm.title} onChange={e=>setTaskForm({...taskForm,title:e.target.value})} placeholder="Título *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
@@ -255,21 +345,152 @@ function App(){
         </div>
       )}
 
-      {modal==='esc'&&(
+      {/* NOVA ESCALA MODAL */}
+      {modal==='escala'&&(
         <div className="modal" onClick={()=>setModal(null)}>
-          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">ESCALA</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50 max-h-[90vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4">
+              <h2 className="text-xl font-orbitron text-cyan-400">NOVA ESCALA</h2>
+              <button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
             <div className="space-y-4">
-              <input type="date" value={escDate} onChange={e=>setEscDate(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
-              <div className="grid grid-cols-2 gap-2">
-                {[{t:'branca',l:'Dia Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>{
-                  const st=getEscStyle(x.t);
-                  return(
-                    <button key={x.t} onClick={()=>setEscType(x.t)} className={`p-3 rounded-lg font-bold text-sm ${st.bg} ${st.text} border-2 ${escType===x.t?st.border+' shadow-lg '+st.glow:'border-transparent'}`}>{x.l}</button>
-                  );
-                })}
+              {/* Data */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">DATA *</label>
+                <input type="date" value={escForm.date} onChange={e=>setEscForm({...escForm,date:e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
               </div>
-              <button onClick={addEsc} disabled={!escDate} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CONFIRMAR</button>
+
+              {/* Tipo */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">TIPO DE SERVIÇO</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={()=>setEscForm({...escForm,tipo:'guarda',posto:''})} className={`p-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 ${escForm.tipo==='guarda'?'bg-amber-500 text-black':'bg-gray-800 text-gray-400'}`}>
+                    <Icon name="Shield" size={16}/>Guarda
+                  </button>
+                  <button onClick={()=>setEscForm({...escForm,tipo:'limpeza',posto:''})} className={`p-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 ${escForm.tipo==='limpeza'?'bg-green-500 text-black':'bg-gray-800 text-gray-400'}`}>
+                    <Icon name="Sparkles" size={16}/>Limpeza (Fiscal)
+                  </button>
+                </div>
+              </div>
+
+              {/* Turma */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">TURMA</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {TURMAS.map(t=>(
+                    <button key={t.id} onClick={()=>setEscForm({...escForm,turma:t.id})} className={`p-2 rounded-lg font-bold text-xs border-2 ${t.cor} ${escForm.turma===t.id?'ring-2 ring-cyan-500':'opacity-60'}`}>
+                      {t.nome}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Posto (Guarda) */}
+              {escForm.tipo==='guarda'&&(
+                <div>
+                  <label className="text-xs text-gray-400 block mb-2">POSTO *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {currentPostos.map(p=>(
+                      <button key={p.id} onClick={()=>setEscForm({...escForm,posto:p.id})} className={`p-3 rounded-lg text-sm flex items-center gap-2 ${escForm.posto===p.id?'bg-amber-500 text-black font-bold':'bg-gray-800 text-gray-300'}`}>
+                        <Icon name={p.icon} size={16}/>{p.nome}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Limpeza */}
+              {escForm.tipo==='limpeza'&&(
+                <div>
+                  <label className="text-xs text-gray-400 block mb-2">LOCAL *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LIMPEZAS.map(l=>(
+                      <button key={l.id} onClick={()=>setEscForm({...escForm,posto:l.id})} className={`p-3 rounded-lg text-sm flex items-center gap-2 ${escForm.posto===l.id?'bg-green-500 text-black font-bold':'bg-gray-800 text-gray-300'}`}>
+                        <Icon name={l.icon} size={16}/>{l.nome}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quarto de Hora (só para guarda) */}
+              {escForm.tipo==='guarda'&&(
+                <div>
+                  <label className="text-xs text-gray-400 block mb-2">QUARTO DE HORA</label>
+                  <select value={escForm.quarto} onChange={e=>setEscForm({...escForm,quarto:parseInt(e.target.value)})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3">
+                    {QUARTOS.map(q=>(
+                      <option key={q.id} value={q.id}>{q.nome}</option>
+                    ))}
+                  </select>
+                  <div className="mt-2 bg-gray-800/50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Horários do {getQuartoInfo(escForm.quarto).nome}:</p>
+                    <p className="text-sm text-cyan-400 font-mono">{getQuartoInfo(escForm.quarto).horarios}</p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">⏰ Ciclo: 1°→2°→3°→1°→2°→3°... (24h)</p>
+                </div>
+              )}
+
+              {/* Observações */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">OBSERVAÇÕES</label>
+                <textarea value={escForm.obs} onChange={e=>setEscForm({...escForm,obs:e.target.value})} placeholder="Anotações adicionais..." rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 resize-none"/>
+              </div>
+
+              <button onClick={addEscala} disabled={!escForm.date||!escForm.posto} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">
+                REGISTRAR ESCALA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DETALHES ESCALA MODAL */}
+      {modal==='escala-detail'&&selectedEscala&&(
+        <div className="modal" onClick={()=>{setModal(null);setSelectedEscala(null);}}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4">
+              <h2 className="text-xl font-orbitron text-cyan-400">DETALHES</h2>
+              <button onClick={()=>{setModal(null);setSelectedEscala(null);}} className="text-gray-400 text-xl">✕</button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold">{fmtDFull(selectedEscala.date)}</p>
+                <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-bold ${getTurmaCor(selectedEscala.turma)}`}>
+                  Turma {getTurmaNome(selectedEscala.turma)}
+                </span>
+              </div>
+
+              <div className={`rounded-xl p-4 border-2 ${selectedEscala.tipo==='guarda'?'border-amber-500 bg-amber-500/10':'border-green-500 bg-green-500/10'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedEscala.tipo==='guarda'?'bg-amber-500':'bg-green-500'}`}>
+                    <Icon name={getPostoIcon(selectedEscala.posto)} size={24} className="text-black"/>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">{selectedEscala.tipo==='guarda'?'POSTO':'FISCAL DE LIMPEZA'}</p>
+                    <p className="text-lg font-bold">{getPostoNome(selectedEscala.posto)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {selectedEscala.tipo==='guarda'&&(
+                <div className="bg-gray-800/50 rounded-xl p-4">
+                  <p className="text-xs text-gray-400 mb-2">QUARTO DE HORA</p>
+                  <p className="font-bold text-lg">{getQuartoInfo(selectedEscala.quarto).nome}</p>
+                  <p className="text-cyan-400 font-mono text-sm mt-1">{getQuartoInfo(selectedEscala.quarto).horarios}</p>
+                </div>
+              )}
+
+              {selectedEscala.obs&&(
+                <div className="bg-gray-800/50 rounded-xl p-4">
+                  <p className="text-xs text-gray-400 mb-2">OBSERVAÇÕES</p>
+                  <p className="text-sm">{selectedEscala.obs}</p>
+                </div>
+              )}
+
+              <button onClick={()=>deleteEscala(selectedEscala.id)} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold flex items-center justify-center gap-2">
+                <Icon name="Trash2" size={16}/>EXCLUIR ESCALA
+              </button>
             </div>
           </div>
         </div>
@@ -382,68 +603,213 @@ function App(){
 
         {tab==='escalas'&&(
           <div className="space-y-4">
-            <div className="flex justify-between items-center"><h1 className="text-xl font-orbitron font-bold">ESCALAS</h1><button onClick={()=>setModal('esc')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center"><Icon name="Plus" size={20}/></button></div>
-            <div className="glass rounded-xl p-4 border border-gray-700">
-              <div className="flex justify-between items-center mb-4">
-                <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1))} className="p-2"><Icon name="ChevronLeft" size={18}/></button>
-                <span className="font-orbitron capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</span>
-                <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1))} className="p-2"><Icon name="ChevronRight" size={18}/></button>
-              </div>
-              <div className="grid grid-cols-7 gap-1 mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-center text-[10px] text-gray-500 py-1">{d}</div>)}</div>
-              <div className="grid grid-cols-7 gap-1">
-                {monthDays().map((d,i)=>{
-                  if(!d)return<div key={i} className="aspect-square"/>;
-                  const e=esc[d.date];
-                  const st=e?getEscStyle(e):null;
-                  const isToday=d.date===today();
-                  return(
-                    <button 
-                      key={d.date} 
-                      onClick={()=>e?setEsc(p=>{const n={...p};delete n[d.date];return n;}):(setEscDate(d.date),setModal('esc'))} 
-                      className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                        e?`${st.bg} ${st.text} ${st.border} shadow-lg ${st.glow} duty-day`:'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500'
-                      } ${isToday?'ring-2 ring-cyan-500 ring-offset-2 ring-offset-[#0a0a0f]':''}`}
-                    >
-                      {d.day}
+            <div className="flex justify-between items-center">
+              <h1 className="text-xl font-orbitron font-bold">ESCALAS</h1>
+              <button onClick={()=>setModal('escala')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center">
+                <Icon name="Plus" size={20}/>
+              </button>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex gap-2">
+              {[{id:'calendario',icon:'Calendar',label:'Calendário'},{id:'lista',icon:'List',label:'Lista'},{id:'config',icon:'Settings',label:'Config'}].map(t=>(
+                <button key={t.id} onClick={()=>setEscalaTab(t.id)} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 ${escalaTab===t.id?'bg-cyan-500 text-black':'bg-gray-800 text-gray-400'}`}>
+                  <Icon name={t.icon} size={14}/>{t.label}
+                </button>
+              ))}
+            </div>
+
+            {escalaTab==='calendario'&&(
+              <>
+                {/* Calendário */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <div className="flex justify-between items-center mb-4">
+                    <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1))} className="p-2"><Icon name="ChevronLeft" size={18}/></button>
+                    <span className="font-orbitron capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</span>
+                    <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1))} className="p-2"><Icon name="ChevronRight" size={18}/></button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-center text-[10px] text-gray-500 py-1">{d}</div>)}</div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {monthDays().map((d,i)=>{
+                      if(!d)return<div key={i} className="aspect-square"/>;
+                      const esc=getEscalaByDate(d.date);
+                      const isToday=d.date===today();
+                      return(
+                        <button 
+                          key={d.date} 
+                          onClick={()=>{
+                            if(esc){setSelectedEscala(esc);setModal('escala-detail');}
+                            else{setEscForm({...escForm,date:d.date});setModal('escala');}
+                          }}
+                          className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${
+                            esc
+                              ?`${getTurmaCor(esc.turma)} duty-day`
+                              :'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500'
+                          } ${isToday?'ring-2 ring-cyan-500 ring-offset-1 ring-offset-[#0a0a0f]':''}`}
+                        >
+                          <span>{d.day}</span>
+                          {esc&&<Icon name={esc.tipo==='guarda'?'Shield':'Sparkles'} size={10}/>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Legenda */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">TURMAS</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {TURMAS.map(t=>(
+                      <div key={t.id} className={`${t.cor} rounded-lg p-2 text-center text-xs font-bold border-2`}>
+                        {t.nome}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-4 mt-3 text-xs text-gray-400">
+                    <span className="flex items-center gap-1"><Icon name="Shield" size={12}/>Guarda</span>
+                    <span className="flex items-center gap-1"><Icon name="Sparkles" size={12}/>Limpeza</span>
+                  </div>
+                </div>
+
+                {/* Estatísticas do mês */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-2">ESTE MÊS: {escalasMes.length} SERVIÇOS</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-amber-500/20 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-amber-400">{escalasMes.filter(e=>e.tipo==='guarda').length}</p>
+                      <p className="text-[10px] text-gray-400">Guardas</p>
+                    </div>
+                    <div className="bg-green-500/20 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-400">{escalasMes.filter(e=>e.tipo==='limpeza').length}</p>
+                      <p className="text-[10px] text-gray-400">Limpezas</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {escalaTab==='lista'&&(
+              <>
+                {/* Próximas escalas */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">PRÓXIMAS ESCALAS</p>
+                  {proximasEscalas.length===0?(
+                    <p className="text-center text-gray-500 py-4">Nenhuma escala agendada</p>
+                  ):(
+                    <div className="space-y-2">
+                      {proximasEscalas.map(esc=>(
+                        <button key={esc.id} onClick={()=>{setSelectedEscala(esc);setModal('escala-detail');}} className="w-full bg-gray-800/50 rounded-lg p-3 flex items-center gap-3 text-left">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${esc.tipo==='guarda'?'bg-amber-500':'bg-green-500'}`}>
+                            <Icon name={getPostoIcon(esc.posto)} size={20} className="text-black"/>
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-sm">{getPostoNome(esc.posto)}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-[10px] px-2 py-0.5 rounded ${getTurmaCor(esc.turma)}`}>{getTurmaNome(esc.turma)}</span>
+                              {esc.tipo==='guarda'&&<span className="text-[10px] text-gray-500">{getQuartoInfo(esc.quarto).nome}</span>}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold">{fmtD(esc.date)}</p>
+                            <p className={`text-[10px] ${daysTo(esc.date)<=1?'text-red-400':'text-gray-500'}`}>
+                              {daysTo(esc.date)===0?'HOJE':daysTo(esc.date)===1?'AMANHÃ':`${daysTo(esc.date)}d`}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Histórico */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">HISTÓRICO ({escalas.filter(e=>e.date<today()).length})</p>
+                  {escalas.filter(e=>e.date<today()).length===0?(
+                    <p className="text-center text-gray-500 py-4">Nenhuma escala anterior</p>
+                  ):(
+                    <div className="space-y-2 max-h-60 overflow-auto">
+                      {escalas.filter(e=>e.date<today()).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10).map(esc=>(
+                        <div key={esc.id} className="bg-gray-800/30 rounded-lg p-2 flex items-center gap-2 opacity-60">
+                          <Icon name={getPostoIcon(esc.posto)} size={16} className="text-gray-500"/>
+                          <span className="text-sm flex-1">{getPostoNome(esc.posto)}</span>
+                          <span className="text-xs text-gray-500">{fmtD(esc.date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {escalaTab==='config'&&(
+              <div className="space-y-4">
+                {/* Toggle Postos */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="font-bold">Postos de Guarda</p>
+                      <p className="text-xs text-gray-500">Selecione os postos disponíveis</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <button onClick={()=>setConfig({...config,usarPostosNovos:false})} className={`w-full p-3 rounded-lg text-left flex items-center justify-between ${!config.usarPostosNovos?'bg-cyan-500/20 border border-cyan-500':'bg-gray-800'}`}>
+                      <div>
+                        <p className="font-bold text-sm">Postos Atuais</p>
+                        <p className="text-[10px] text-gray-400">Rancho, Piscina, Plantão, Permanência</p>
+                      </div>
+                      {!config.usarPostosNovos&&<Icon name="Check" size={20} className="text-cyan-400"/>}
                     </button>
-                  );
-                })}
+                    <button onClick={()=>setConfig({...config,usarPostosNovos:true})} className={`w-full p-3 rounded-lg text-left flex items-center justify-between ${config.usarPostosNovos?'bg-cyan-500/20 border border-cyan-500':'bg-gray-800'}`}>
+                      <div>
+                        <p className="font-bold text-sm">Novos Postos</p>
+                        <p className="text-[10px] text-gray-400">Portão, Motorizada, Adjunto, Aux Cmt</p>
+                      </div>
+                      {config.usarPostosNovos&&<Icon name="Check" size={20} className="text-cyan-400"/>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Info Quartos */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">QUARTOS DE HORA (CICLO 24H)</p>
+                  <div className="space-y-2">
+                    {QUARTOS.map(q=>(
+                      <div key={q.id} className="bg-gray-800/50 rounded-lg p-3">
+                        <p className="font-bold text-sm text-white">{q.nome}</p>
+                        <p className="text-xs text-cyan-400 font-mono mt-1">{q.horarios}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3 text-center">1°→2°→3°→1°→2°→3°→1°→2°→3°→1°→2°→3°</p>
+                </div>
+
+                {/* Postos disponíveis */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">POSTOS DISPONÍVEIS</p>
+                  <div className="space-y-2">
+                    {currentPostos.map(p=>(
+                      <div key={p.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center gap-2">
+                        <Icon name={p.icon} size={16} className="text-amber-400"/>
+                        <span className="text-sm">{p.nome}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Limpezas */}
+                <div className="glass rounded-xl p-4 border border-gray-700">
+                  <p className="text-xs text-gray-500 mb-3">LIMPEZAS (FISCAL)</p>
+                  <div className="space-y-2">
+                    {LIMPEZAS.map(l=>(
+                      <div key={l.id} className="bg-gray-800/50 rounded-lg p-2 flex items-center gap-2">
+                        <Icon name={l.icon} size={16} className="text-green-400"/>
+                        <span className="text-sm">{l.nome}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="glass rounded-xl p-4 border border-gray-700">
-              <p className="text-xs text-gray-500 mb-3">LEGENDA</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[{t:'branca',l:'Dia Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>{
-                  const st=getEscStyle(x.t);
-                  return(
-                    <div key={x.t} className="flex items-center gap-2">
-                      <div className={`w-6 h-6 rounded ${st.bg} ${st.border} border-2 shadow-md ${st.glow}`}/>
-                      <span className="text-sm">{x.l}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-cyan-400 mt-4">⚡ Serviço = streak de treino congelado</p>
-            </div>
-            {/* Escalas count */}
-            <div className="glass rounded-xl p-4 border border-gray-700">
-              <p className="text-xs text-gray-500 mb-2">ESTE MÊS</p>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                {[{t:'branca',l:'Úteis'},{t:'preta',l:'Sextas'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriados'}].map(x=>{
-                  const count=Object.entries(esc).filter(([d,type])=>{
-                    const dt=new Date(d+'T00:00:00');
-                    return dt.getMonth()===month.getMonth()&&dt.getFullYear()===month.getFullYear()&&type===x.t;
-                  }).length;
-                  const st=getEscStyle(x.t);
-                  return(
-                    <div key={x.t} className="bg-gray-800/50 rounded-lg p-2">
-                      <p className={`text-xl font-bold ${st.text==='text-gray-900'?'text-white':st.text}`}>{count}</p>
-                      <p className="text-[9px] text-gray-500">{x.l}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -452,10 +818,10 @@ function App(){
             <h1 className="text-xl font-orbitron font-bold">TREINO</h1>
             <div className="glass rounded-xl p-6 border border-gray-700 text-center">
               <p className="text-xs text-gray-500 mb-3">HOJE</p>
-              <button onClick={()=>togEx(today())} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${onDuty(today())?'bg-purple-600/30 border-2 border-purple-500':ex.hist.find(h=>h.d===today())?.ok?'bg-green-500':'bg-gray-800 border-2 border-dashed border-gray-600'}`}>
-                {onDuty(today())?<Icon name="Shield" size={32} className="text-purple-400"/>:ex.hist.find(h=>h.d===today())?.ok?<Icon name="Check" size={32}/>:<Icon name="Plus" size={32} className="text-gray-500"/>}
+              <button onClick={()=>togEx(today())} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${hasEscala(today())?'bg-purple-600/30 border-2 border-purple-500':ex.hist.find(h=>h.d===today())?.ok?'bg-green-500':'bg-gray-800 border-2 border-dashed border-gray-600'}`}>
+                {hasEscala(today())?<Icon name="Shield" size={32} className="text-purple-400"/>:ex.hist.find(h=>h.d===today())?.ok?<Icon name="Check" size={32}/>:<Icon name="Plus" size={32} className="text-gray-500"/>}
               </button>
-              <p className="mt-3 font-bold">{onDuty(today())?'SERVIÇO':ex.hist.find(h=>h.d===today())?.ok?'COMPLETO':'MARCAR'}</p>
+              <p className="mt-3 font-bold">{hasEscala(today())?'SERVIÇO':ex.hist.find(h=>h.d===today())?.ok?'COMPLETO':'MARCAR'}</p>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="glass rounded-xl p-3 border border-gray-800 text-center"><p className="text-2xl font-bold text-orange-400">{ex.streak}🔥</p><p className="text-[10px] text-gray-500">STREAK</p></div>
@@ -551,7 +917,7 @@ function App(){
               <p className="text-xs text-gray-500 mb-3">EBBINGHAUS</p>
               <div className="space-y-2 text-sm">{INT.map((d,i)=>(<div key={i} className="flex justify-between bg-gray-800/50 rounded-lg p-2"><span className="text-gray-400">{i+1}ª Rev</span><span className="text-cyan-400">{d}d</span></div>))}</div>
             </div>
-            <button onClick={()=>{if(window.confirm('Resetar?')){setData({items:[],xp:0,hp:100,lv:1,debt:0});setEx({hist:[],streak:0,best:0});setTasks([]);setEsc({});}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold">RESETAR</button>
+            <button onClick={()=>{if(window.confirm('Resetar?')){setData({items:[],xp:0,hp:100,lv:1,debt:0});setEx({hist:[],streak:0,best:0});setTasks([]);setEscalas([]);setConfig({usarPostosNovos:false});}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold">RESETAR</button>
           </div>
         )}
       </div>
