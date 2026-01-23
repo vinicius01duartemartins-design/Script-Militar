@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUNTER SYSTEM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    body{font-family:system-ui;background:#0a0a0f}
+    .font-orbitron{font-family:'Orbitron'}
+    .glass{background:rgba(15,15,20,.95);backdrop-filter:blur(10px)}
+    .hp-bar{background:linear-gradient(90deg,#dc2626,#ef4444);box-shadow:0 0 10px rgba(239,68,68,.5)}
+    .xp-bar{background:linear-gradient(90deg,#7c3aed,#a78bfa);box-shadow:0 0 10px rgba(124,58,237,.5)}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;padding:1rem;z-index:9999}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const Icon=({name,size=24})=>{const ref=useRef();useEffect(()=>{if(ref.current&&lucide.icons[name]){ref.current.innerHTML='';const i=lucide.createElement(lucide.icons[name]);i.setAttribute('width',size);i.setAttribute('height',size);ref.current.appendChild(i);}},[name,size]);return <span ref={ref} className="inline-flex items-center justify-center"/>;};
+
+function App(){
+  const [tab,setTab]=useState('home');
+  const [modal,setModal]=useState(null);
+  const [selSubj,setSelSubj]=useState(null);
+  const [newSubj,setNewSubj]=useState('');
+  const [selRev,setSelRev]=useState(null);
+  const [month,setMonth]=useState(new Date());
+  const [escDate,setEscDate]=useState('');
+  const [escType,setEscType]=useState('branca');
+  const [form,setForm]=useState({topic:'',mins:'',conf:3});
+  const [taskForm,setTaskForm]=useState({title:'',deadline:''});
+
+  const INT=[1,7,15,30,45];
+  const SUBJ=['Comunicação e Expressão','Didática','Lógica','Metodologia Científica','Psicologia','Chefia e Liderança','Escrituração Profissional','TIC','Gestão Contemporânea','Gestão de Pessoas','Direito Administrativo','Direito Adm. Disciplinar Militar','Direito Penal','Direito Penal Militar','Doutrina de Polícia Ostensiva'];
+  const RANKS=[{n:'E',min:0,max:299,c:'#6B7280',t:'Iniciante'},{n:'D',min:300,max:799,c:'#10B981',t:'Promissor'},{n:'C',min:800,max:1799,c:'#3B82F6',t:'Competente'},{n:'B',min:1800,max:3499,c:'#8B5CF6',t:'Elite'},{n:'A',min:3500,max:5999,c:'#EF4444',t:'Nacional'},{n:'S',min:6000,max:99999,c:'#F59E0B',t:'Shadow Monarch'}];
+
+  const [data,setData]=useState({items:[],xp:0,hp:100,lv:1,debt:0});
+  const [ex,setEx]=useState({hist:[],streak:0,best:0});
+  const [tasks,setTasks]=useState([]);
+  const [esc,setEsc]=useState({});
+
+  useEffect(()=>{const s=localStorage.getItem('hv3');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.esc)setEsc(p.esc);}},[]);
+  useEffect(()=>{localStorage.setItem('hv3',JSON.stringify({data,ex,tasks,esc}));},[data,ex,tasks,esc]);
+
+  const today=()=>new Date().toISOString().split('T')[0];
+  const addD=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];};
+  const fmtD=(d)=>new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  const daysTo=(d)=>Math.ceil((new Date(d+'T00:00:00')-new Date(today()+'T00:00:00'))/86400000);
+  const onDuty=(d)=>esc[d]!==undefined;
+  const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
+  const dmg=(a)=>setData(p=>{const h=Math.max(0,p.hp-a);if(h===0&&p.lv>1){alert('LEVEL DOWN!');return{...p,hp:100,lv:p.lv-1,xp:Math.max(0,p.xp-300)};}return{...p,hp:h};});
+
+  const rank=RANKS.find(r=>data.xp>=r.min&&data.xp<=r.max)||RANKS[0];
+  const nextR=RANKS[RANKS.findIndex(r=>r.n===rank.n)+1];
+  const prog=nextR?((data.xp-rank.min)/(rank.max-rank.min+1))*100:100;
+  const pend=data.items.filter(i=>i.next<=today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
+  const upcoming=data.items.filter(i=>i.next>today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
+
+  const addStudy=()=>{if(!form.topic||!form.mins||!newSubj)return;const t=today();setData(p=>({...p,items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],xp:p.xp+50}));heal(10);setForm({topic:'',mins:'',conf:3});setNewSubj('');setModal(null);};
+  const doReview=()=>{if(!form.mins||!selRev)return;const t=today();const ns=selRev.stage+1;const ni=ns<INT.length?INT[ns]:45;setData(p=>({...p,items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),xp:p.xp+40}));heal(5);setForm({topic:'',mins:'',conf:3});setSelRev(null);setModal(null);};
+  const skipRev=()=>{dmg(5);setData(p=>({...p,xp:Math.max(0,p.xp-25),debt:p.debt+20}));setModal('punish');};
+  const doPush=()=>{setData(p=>({...p,debt:0,xp:p.xp+10}));heal(5);setModal(null);};
+
+  const togEx=(d)=>{if(onDuty(d))return;let h=[...ex.hist];const i=h.findIndex(x=>x.d===d);let xc=0;if(i>=0){h[i]={...h[i],ok:!h[i].ok};xc=h[i].ok?40:-40;if(h[i].ok)heal(10);}else{h=[{d,ok:true},...h];xc=40;heal(10);}let s=0;for(let j=0;j<100;j++){const dd=addD(today(),-j);if(onDuty(dd))continue;const e=h.find(x=>x.d===dd);if(e?.ok)s++;else break;}setEx({hist:h,streak:s,best:Math.max(ex.best,s)});setData(p=>({...p,xp:Math.max(0,p.xp+xc)}));};
+  const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:onDuty(ds),day:x.getDate()});}return d;};
+
+  const addTask=()=>{if(!taskForm.title)return;setTasks(p=>[{id:Date.now(),...taskForm,done:false},...p]);setTaskForm({title:'',deadline:''});setModal(null);};
+  const togTask=(id)=>{setTasks(p=>p.map(t=>{if(t.id===id){if(!t.done){setData(d=>({...d,xp:d.xp+25}));heal(5);}else setData(d=>({...d,xp:Math.max(0,d.xp-25)}));return{...t,done:!t.done};}return t;}));};
+
+  const monthDays=()=>{const y=month.getFullYear(),m=month.getMonth();const f=new Date(y,m,1),l=new Date(y,m+1,0);const d=[];for(let i=0;i<f.getDay();i++)d.push(null);for(let i=1;i<=l.getDate();i++)d.push({day:i,date:new Date(y,m,i).toISOString().split('T')[0]});return d;};
+  const addEsc=()=>{if(!escDate)return;setEsc(p=>({...p,[escDate]:escType}));setModal(null);setEscDate('');};
+  const escStyle=(t)=>({branca:'bg-white text-gray-900',preta:'bg-gray-900 text-white border border-gray-600',vermelha:'bg-red-600 text-white',roxa:'bg-purple-600 text-white'}[t]||'bg-gray-800');
+  const stageName=(s)=>['1ª Rev','2ª Rev','3ª Rev','4ª Rev','5ª Rev'][s]||'Manut.';
+
+  return(
+    <div className="min-h-screen bg-[#0a0a0f] text-white pb-20">
+      {/* MODALS */}
+      {modal==='study'&&(
+        <div className="modal" onClick={()=>setModal(null)}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50 max-h-[90vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVO ESTUDO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="space-y-4">
+              <select value={newSubj} onChange={e=>setNewSubj(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"><option value="">Matéria...</option>{SUBJ.map(s=><option key={s} value={s}>{s}</option>)}</select>
+              {newSubj&&<>
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3"><p className="text-cyan-400 font-bold">{newSubj}</p><p className="text-xs text-gray-500">1d→7d→15d→30d→45d</p></div>
+                <input value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="Tópico *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+                <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+                <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-cyan-500':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
+                <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP</button>
+              </>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='review'&&selRev&&(
+        <div className="modal" onClick={()=>setModal(null)}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-amber-500/50" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-amber-400">REVISÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+              <p className="text-xs text-amber-500">{selRev.subj}</p>
+              <p className="font-bold text-amber-400">{selRev.topic}</p>
+              <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded mt-2 inline-block">{stageName(selRev.stage)}</span>
+            </div>
+            <div className="space-y-4">
+              <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+              <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-amber-500 text-black':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
+              <button onClick={doReview} disabled={!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-amber-500 to-orange-500 text-black disabled:opacity-50">COMPLETAR +40 XP</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='task'&&(
+        <div className="modal" onClick={()=>setModal(null)}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVA MISSÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="space-y-4">
+              <input value={taskForm.title} onChange={e=>setTaskForm({...taskForm,title:e.target.value})} placeholder="Título *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+              <input type="date" value={taskForm.deadline} onChange={e=>setTaskForm({...taskForm,deadline:e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+              <button onClick={addTask} disabled={!taskForm.title} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CRIAR</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='esc'&&(
+        <div className="modal" onClick={()=>setModal(null)}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">ESCALA</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="space-y-4">
+              <input type="date" value={escDate} onChange={e=>setEscDate(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+              <div className="grid grid-cols-2 gap-2">
+                {[{t:'branca',l:'Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>(
+                  <button key={x.t} onClick={()=>setEscType(x.t)} className={`p-3 rounded-lg font-bold text-sm ${escStyle(x.t)} ${escType===x.t?'ring-2 ring-cyan-500':''}`}>{x.l}</button>
+                ))}
+              </div>
+              <button onClick={addEsc} disabled={!escDate} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CONFIRMAR</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='punish'&&data.debt>0&&(
+        <div className="modal">
+          <div className="w-full max-w-md glass rounded-2xl p-6 border-2 border-red-500/50 text-center">
+            <h2 className="text-2xl font-orbitron text-red-500 mb-4">PUNIÇÃO</h2>
+            <div className="bg-red-500/10 rounded-xl p-6 mb-6 border border-red-500/30">
+              <p className="text-5xl font-bold text-red-500">{data.debt}</p>
+              <p className="text-xl text-red-400 mt-2">FLEXÕES</p>
+            </div>
+            <button onClick={doPush} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-green-600 to-emerald-600">CONCLUÍDO +10 XP</button>
+            <button onClick={()=>setModal(null)} className="w-full py-3 text-gray-500 text-sm mt-2">Depois</button>
+          </div>
+        </div>
+      )}
+
+      {/* CONTENT */}
+      <div className="max-w-md mx-auto p-4">
+        {tab==='home'&&(
+          <div className="space-y-4">
+            <div className="glass rounded-2xl p-5 border border-cyan-500/30">
+              <div className="flex justify-between mb-4">
+                <div>
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-orbitron font-black mb-2" style={{backgroundColor:rank.c,boxShadow:`0 0 20px ${rank.c}`}}>{rank.n}</div>
+                  <h2 className="text-lg font-orbitron font-bold" style={{color:rank.c}}>RANK {rank.n}</h2>
+                  <p className="text-gray-500 text-xs">{rank.t}</p>
+                  <p className="text-cyan-400 text-xs mt-1">LV {data.lv}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-purple-400">{data.xp}</p>
+                  <p className="text-[10px] text-gray-500">XP</p>
+                </div>
+              </div>
+              <div className="mb-3">
+                <div className="flex justify-between text-[10px] text-gray-500 mb-1"><span>XP</span><span>{nextR?`${nextR.min-data.xp}→${nextR.n}`:'MAX'}</span></div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5"><div className="xp-bar h-full rounded-full transition-all" style={{width:`${prog}%`}}/></div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-red-400">HP</span><span className="text-red-400">{data.hp}/100</span></div>
+                <div className="w-full bg-gray-800/50 rounded-full h-2.5 border border-red-500/30"><div className={`hp-bar h-full rounded-full transition-all ${data.hp<=20?'animate-pulse':''}`} style={{width:`${data.hp}%`}}/></div>
+                {data.hp<=20&&<p className="text-red-500 text-[10px] mt-1 animate-pulse">⚠ HP CRÍTICO</p>}
+              </div>
+              {data.debt>0&&<button onClick={()=>setModal('punish')} className="w-full mt-4 py-2 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">DÍVIDA: {data.debt} FLEXÕES</button>}
+            </div>
+
+            <button onClick={()=>setModal('study')} className="w-full py-4 rounded-xl font-orbitron font-bold bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center gap-2">
+              <Icon name="Plus" size={20}/> NOVO ESTUDO <span className="text-cyan-200 text-sm">+50 XP</span>
+            </button>
+
+            {pend.length>0&&(
+              <div className="glass rounded-xl p-4 border border-amber-500/30">
+                <div className="flex items-center gap-2 mb-4"><Icon name="Brain" size={20} className="text-amber-500"/><span className="font-orbitron text-amber-400">REVISÕES</span><span className="ml-auto bg-amber-500 text-black text-sm font-bold px-2 py-0.5 rounded-full">{pend.length}</span></div>
+                <div className="space-y-3">
+                  {pend.slice(0,3).map(item=>(
+                    <div key={item.id} className={`glass rounded-lg p-3 border ${daysTo(item.next)<0?'border-red-500/50':'border-amber-500/30'}`}>
+                      <p className="text-[10px] text-gray-500">{item.subj}</p>
+                      <p className="font-bold text-sm">{item.topic}</p>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={()=>{setSelRev(item);setModal('review');}} className="flex-1 py-2 rounded-lg text-sm font-bold bg-amber-500 text-black">REVISAR</button>
+                        <button onClick={skipRev} className="flex-1 py-2 rounded-lg text-sm font-bold bg-red-500/20 text-red-400 border border-red-500/30">PULAR</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pend.length===0&&data.items.length>0&&(
+              <div className="glass rounded-xl p-6 border border-green-500/30 text-center">
+                <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
+                <p className="font-orbitron text-green-400">SISTEMA LIMPO</p>
+                <p className="text-xs text-gray-500 mt-1">Próxima: {upcoming[0]?fmtD(upcoming[0].next):'-'}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="glass rounded-xl p-3 border border-gray-800"><Icon name="Award" size={16} className="text-cyan-400 mb-1"/><p className="text-[10px] text-gray-500">ESTUDOS</p><p className="text-xl font-bold text-cyan-400">{data.items.length}</p></div>
+              <div className="glass rounded-xl p-3 border border-gray-800"><Icon name="RefreshCw" size={16} className="text-amber-400 mb-1"/><p className="text-[10px] text-gray-500">REVISÕES</p><p className="text-xl font-bold text-amber-400">{data.items.reduce((a,i)=>a+i.revs.length,0)}</p></div>
+              <div className="glass rounded-xl p-3 border border-gray-800"><Icon name="Flame" size={16} className="text-orange-400 mb-1"/><p className="text-[10px] text-gray-500">STREAK</p><p className="text-xl font-bold text-orange-400">{ex.streak}</p></div>
+            </div>
+          </div>
+        )}
+
+        {tab==='materias'&&(
+          <div className="space-y-3">
+            <h1 className="text-xl font-orbitron font-bold mb-4">MATÉRIAS</h1>
+            {SUBJ.map(s=>{const its=data.items.filter(i=>i.subj===s);const exp=selSubj===s;return(
+              <div key={s} className={`glass rounded-xl border overflow-hidden ${its.length?'border-gray-700':'border-gray-800 opacity-50'}`}>
+                <button onClick={()=>its.length&&setSelSubj(exp?null:s)} className="w-full p-4 flex items-center justify-between text-left" disabled={!its.length}>
+                  <div><p className="font-bold text-sm">{s}</p><p className="text-[10px] text-gray-500">{its.length?`${its.length} tópicos`:'Não iniciada'}</p></div>
+                  {its.length>0&&<Icon name="ChevronDown" size={16} className={`text-gray-500 transition-transform ${exp?'rotate-180':''}`}/>}
+                </button>
+                {exp&&its.length>0&&(
+                  <div className="border-t border-gray-800 p-3 space-y-2">
+                    {its.map(it=>(
+                      <div key={it.id} className="bg-gray-800/50 rounded-lg p-3">
+                        <div className="flex justify-between"><div><p className="font-medium text-sm">{it.topic}</p><p className="text-[10px] text-gray-500">{fmtD(it.date)} • {it.revs.length} rev</p></div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded ${daysTo(it.next)<0?'bg-red-500/20 text-red-400':'bg-blue-500/20 text-blue-400'}`}>{daysTo(it.next)<0?'Atrasada':`${daysTo(it.next)}d`}</span></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );})}
+          </div>
+        )}
+
+        {tab==='escalas'&&(
+          <div className="space-y-4">
+            <div className="flex justify-between items-center"><h1 className="text-xl font-orbitron font-bold">ESCALAS</h1><button onClick={()=>setModal('esc')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center"><Icon name="Plus" size={20}/></button></div>
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1))} className="p-2"><Icon name="ChevronLeft" size={18}/></button>
+                <span className="font-orbitron capitalize">{month.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</span>
+                <button onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1))} className="p-2"><Icon name="ChevronRight" size={18}/></button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-center text-[10px] text-gray-500 py-1">{d}</div>)}</div>
+              <div className="grid grid-cols-7 gap-1">
+                {monthDays().map((d,i)=>{if(!d)return<div key={i} className="aspect-square"/>;const e=esc[d.date];return(
+                  <button key={d.date} onClick={()=>e?setEsc(p=>{const n={...p};delete n[d.date];return n;}):(setEscDate(d.date),setModal('esc'))} className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border ${e?escStyle(e):'bg-gray-800/50 border-gray-700 text-gray-400'} ${d.date===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
+                );})}
+              </div>
+            </div>
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-2">LEGENDA</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-white"/><span>Útil</span></div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-gray-900 border border-gray-600"/><span>Sexta</span></div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-600"/><span>FDS</span></div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-purple-600"/><span>Feriado</span></div>
+              </div>
+              <p className="text-[10px] text-cyan-400 mt-3">⚡ Serviço = streak congelado</p>
+            </div>
+          </div>
+        )}
+
+        {tab==='treino'&&(
+          <div className="space-y-4">
+            <h1 className="text-xl font-orbitron font-bold">TREINO</h1>
+            <div className="glass rounded-xl p-6 border border-gray-700 text-center">
+              <p className="text-xs text-gray-500 mb-3">HOJE</p>
+              <button onClick={()=>togEx(today())} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${onDuty(today())?'bg-purple-600/30 border-2 border-purple-500':ex.hist.find(h=>h.d===today())?.ok?'bg-green-500':'bg-gray-800 border-2 border-dashed border-gray-600'}`}>
+                {onDuty(today())?<Icon name="Shield" size={32} className="text-purple-400"/>:ex.hist.find(h=>h.d===today())?.ok?<Icon name="Check" size={32}/>:<Icon name="Plus" size={32} className="text-gray-500"/>}
+              </button>
+              <p className="mt-3 font-bold">{onDuty(today())?'SERVIÇO':ex.hist.find(h=>h.d===today())?.ok?'COMPLETO':'MARCAR'}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="glass rounded-xl p-3 border border-gray-800 text-center"><p className="text-2xl font-bold text-orange-400">{ex.streak}🔥</p><p className="text-[10px] text-gray-500">STREAK</p></div>
+              <div className="glass rounded-xl p-3 border border-gray-800 text-center"><p className="text-2xl font-bold text-purple-400">{ex.best}👑</p><p className="text-[10px] text-gray-500">RECORDE</p></div>
+              <div className="glass rounded-xl p-3 border border-gray-800 text-center"><p className="text-2xl font-bold text-cyan-400">{ex.hist.filter(h=>h.ok).length}</p><p className="text-[10px] text-gray-500">TOTAL</p></div>
+            </div>
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-3">30 DIAS</p>
+              <div className="grid grid-cols-7 gap-1">
+                {last30().map(d=>(
+                  <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${d.duty?'bg-purple-600/30 text-purple-400':d.ok?'bg-green-500 text-white':'bg-gray-800 text-gray-500'} ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==='missoes'&&(
+          <div className="space-y-4">
+            <div className="flex justify-between items-center"><h1 className="text-xl font-orbitron font-bold">MISSÕES</h1><button onClick={()=>setModal('task')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center"><Icon name="Plus" size={20}/></button></div>
+            {tasks.length===0?<div className="glass rounded-xl p-8 border border-gray-700 text-center"><Icon name="ListTodo" size={40} className="mx-auto text-gray-600 mb-2"/><p className="text-gray-500">Nenhuma missão</p></div>:(
+              <div className="space-y-3">
+                {tasks.sort((a,b)=>a.done===b.done?0:a.done?1:-1).map(t=>(
+                  <div key={t.id} className={`glass rounded-xl p-4 border ${t.done?'border-gray-800 opacity-50':'border-gray-700'}`}>
+                    <div className="flex items-start gap-3">
+                      <button onClick={()=>togTask(t.id)} className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${t.done?'bg-green-500 border-green-500':'border-gray-600'}`}>{t.done&&<Icon name="Check" size={12}/>}</button>
+                      <div className="flex-1"><p className={`font-bold text-sm ${t.done?'line-through text-gray-500':''}`}>{t.title}</p>{t.deadline&&<p className="text-[10px] text-gray-500 mt-1">{fmtD(t.deadline)}</p>}</div>
+                      <button onClick={()=>setTasks(p=>p.filter(x=>x.id!==t.id))} className="text-gray-500"><Icon name="Trash2" size={16}/></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==='perfil'&&(
+          <div className="space-y-4">
+            <div className="glass rounded-xl p-6 border border-gray-700">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-orbitron font-black" style={{backgroundColor:rank.c,boxShadow:`0 0 20px ${rank.c}`}}>{rank.n}</div>
+                <div><h2 className="text-xl font-orbitron font-bold" style={{color:rank.c}}>RANK {rank.n}</h2><p className="text-gray-500 text-sm">{rank.t}</p><p className="text-cyan-400 text-sm">LV {data.lv} • {data.xp} XP</p></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-800/50 rounded-lg p-3 text-center"><p className="text-2xl font-bold text-cyan-400">{data.items.length}</p><p className="text-xs text-gray-500">Tópicos</p></div>
+                <div className="bg-gray-800/50 rounded-lg p-3 text-center"><p className="text-2xl font-bold text-amber-400">{data.items.reduce((a,i)=>a+i.revs.length,0)}</p><p className="text-xs text-gray-500">Revisões</p></div>
+              </div>
+            </div>
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-3">EBBINGHAUS</p>
+              <div className="space-y-2 text-sm">{INT.map((d,i)=>(<div key={i} className="flex justify-between bg-gray-800/50 rounded-lg p-2"><span className="text-gray-400">{i+1}ª Rev</span><span className="text-cyan-400">{d}d</span></div>))}</div>
+            </div>
+            <button onClick={()=>{if(window.confirm('Resetar?')){setData({items:[],xp:0,hp:100,lv:1,debt:0});setEx({hist:[],streak:0,best:0});setTasks([]);setEsc({});}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold">RESETAR</button>
+          </div>
+        )}
+      </div>
+
+      {/* NAV */}
+      <nav className="fixed bottom-0 left-0 right-0 glass border-t border-gray-800">
+        <div className="max-w-md mx-auto flex justify-around py-2">
+          {[{id:'home',i:'Home',l:'Missão'},{id:'materias',i:'BookOpen',l:'Matérias'},{id:'escalas',i:'CalendarDays',l:'Escalas'},{id:'treino',i:'Dumbbell',l:'Treino'},{id:'missoes',i:'ListTodo',l:'Tarefas'},{id:'perfil',i:'User',l:'Perfil'}].map(({id,i,l})=>(
+            <button key={id} onClick={()=>setTab(id)} className={`flex flex-col items-center py-2 px-2 rounded-lg ${tab===id?'text-cyan-400':'text-gray-500'}`}><Icon name={i} size={20}/><span className="text-[9px] mt-1">{l}</span></button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
