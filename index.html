@@ -17,6 +17,8 @@
     .hp-bar{background:linear-gradient(90deg,#dc2626,#ef4444);box-shadow:0 0 10px rgba(239,68,68,.5)}
     .xp-bar{background:linear-gradient(90deg,#7c3aed,#a78bfa);box-shadow:0 0 10px rgba(124,58,237,.5)}
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;padding:1rem;z-index:9999}
+    .duty-day{animation:pulse-duty 2s ease-in-out infinite}
+    @keyframes pulse-duty{0%,100%{box-shadow:0 0 5px currentColor}50%{box-shadow:0 0 15px currentColor,0 0 25px currentColor}}
   </style>
 </head>
 <body>
@@ -35,19 +37,58 @@ function App(){
   const [escDate,setEscDate]=useState('');
   const [escType,setEscType]=useState('branca');
   const [form,setForm]=useState({topic:'',mins:'',conf:3});
-  const [taskForm,setTaskForm]=useState({title:'',deadline:''});
+  const [taskForm,setTaskForm]=useState({title:'',desc:'',deadline:'',priority:'media'});
+  const [expandedTask,setExpandedTask]=useState(null);
 
   const INT=[1,7,15,30,45];
   const SUBJ=['Comunicação e Expressão','Didática','Lógica','Metodologia Científica','Psicologia','Chefia e Liderança','Escrituração Profissional','TIC','Gestão Contemporânea','Gestão de Pessoas','Direito Administrativo','Direito Adm. Disciplinar Militar','Direito Penal','Direito Penal Militar','Doutrina de Polícia Ostensiva'];
   const RANKS=[{n:'E',min:0,max:299,c:'#6B7280',t:'Iniciante'},{n:'D',min:300,max:799,c:'#10B981',t:'Promissor'},{n:'C',min:800,max:1799,c:'#3B82F6',t:'Competente'},{n:'B',min:1800,max:3499,c:'#8B5CF6',t:'Elite'},{n:'A',min:3500,max:5999,c:'#EF4444',t:'Nacional'},{n:'S',min:6000,max:99999,c:'#F59E0B',t:'Shadow Monarch'}];
+  const PRIORITIES={alta:{label:'Alta',color:'bg-red-500',border:'border-red-500',icon:'AlertTriangle'},media:{label:'Média',color:'bg-amber-500',border:'border-amber-500',icon:'Minus'},baixa:{label:'Baixa',color:'bg-blue-500',border:'border-blue-500',icon:'ChevronDown'}};
 
   const [data,setData]=useState({items:[],xp:0,hp:100,lv:1,debt:0});
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
   const [tasks,setTasks]=useState([]);
   const [esc,setEsc]=useState({});
 
-  useEffect(()=>{const s=localStorage.getItem('hv3');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.esc)setEsc(p.esc);}},[]);
-  useEffect(()=>{localStorage.setItem('hv3',JSON.stringify({data,ex,tasks,esc}));},[data,ex,tasks,esc]);
+  useEffect(()=>{const s=localStorage.getItem('hv4');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.esc)setEsc(p.esc);}},[]);
+  useEffect(()=>{localStorage.setItem('hv4',JSON.stringify({data,ex,tasks,esc}));},[data,ex,tasks,esc]);
+
+  // Auto-delete completed tasks after 10 minutes & check overdue tasks
+  useEffect(()=>{
+    const interval=setInterval(()=>{
+      const now=Date.now();
+      setTasks(prev=>{
+        let newTasks=[...prev];
+        let xpLoss=0;
+        
+        newTasks=newTasks.filter(t=>{
+          // Remove tasks completed for more than 10 minutes
+          if(t.done&&t.completedAt&&(now-t.completedAt)>600000)return false;
+          return true;
+        });
+        
+        // Check overdue tasks (not done, past deadline)
+        newTasks=newTasks.map(t=>{
+          if(!t.done&&t.deadline&&!t.penalized){
+            const deadline=new Date(t.deadline+'T23:59:59');
+            if(now>deadline.getTime()){
+              xpLoss+=t.priority==='alta'?100:t.priority==='media'?50:25;
+              return{...t,penalized:true};
+            }
+          }
+          return t;
+        });
+        
+        if(xpLoss>0){
+          setData(d=>({...d,xp:Math.max(0,d.xp-xpLoss)}));
+          alert(`PRAZO PERDIDO! -${xpLoss} XP`);
+        }
+        
+        return newTasks;
+      });
+    },10000); // Check every 10 seconds
+    return()=>clearInterval(interval);
+  },[]);
 
   const today=()=>new Date().toISOString().split('T')[0];
   const addD=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];};
@@ -71,13 +112,78 @@ function App(){
   const togEx=(d)=>{if(onDuty(d))return;let h=[...ex.hist];const i=h.findIndex(x=>x.d===d);let xc=0;if(i>=0){h[i]={...h[i],ok:!h[i].ok};xc=h[i].ok?40:-40;if(h[i].ok)heal(10);}else{h=[{d,ok:true},...h];xc=40;heal(10);}let s=0;for(let j=0;j<100;j++){const dd=addD(today(),-j);if(onDuty(dd))continue;const e=h.find(x=>x.d===dd);if(e?.ok)s++;else break;}setEx({hist:h,streak:s,best:Math.max(ex.best,s)});setData(p=>({...p,xp:Math.max(0,p.xp+xc)}));};
   const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:onDuty(ds),day:x.getDate()});}return d;};
 
-  const addTask=()=>{if(!taskForm.title)return;setTasks(p=>[{id:Date.now(),...taskForm,done:false},...p]);setTaskForm({title:'',deadline:''});setModal(null);};
-  const togTask=(id)=>{setTasks(p=>p.map(t=>{if(t.id===id){if(!t.done){setData(d=>({...d,xp:d.xp+25}));heal(5);}else setData(d=>({...d,xp:Math.max(0,d.xp-25)}));return{...t,done:!t.done};}return t;}));};
+  const addTask=()=>{
+    if(!taskForm.title)return;
+    const xpGain=taskForm.priority==='alta'?15:taskForm.priority==='media'?10:5;
+    setTasks(p=>[{id:Date.now(),title:taskForm.title,desc:taskForm.desc,deadline:taskForm.deadline,priority:taskForm.priority,done:false,penalized:false,createdAt:Date.now()},...p]);
+    setTaskForm({title:'',desc:'',deadline:'',priority:'media'});
+    setModal(null);
+  };
+  
+  const togTask=(id)=>{
+    setTasks(p=>p.map(t=>{
+      if(t.id===id){
+        if(!t.done){
+          // Completing task - give XP based on priority
+          const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
+          setData(d=>({...d,xp:d.xp+xpGain}));
+          heal(5);
+          return{...t,done:true,completedAt:Date.now()};
+        }else{
+          // Uncompleting task - remove XP
+          const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
+          setData(d=>({...d,xp:Math.max(0,d.xp-xpGain)}));
+          return{...t,done:false,completedAt:null};
+        }
+      }
+      return t;
+    }));
+  };
+
+  const getDeadlineColor=(deadline,done)=>{
+    if(done)return'text-gray-500';
+    if(!deadline)return'text-gray-400';
+    const days=daysTo(deadline);
+    if(days<0)return'text-red-500 font-bold'; // Overdue
+    if(days<=1)return'text-red-400'; // 1 day or less
+    if(days<=3)return'text-amber-400'; // 2-3 days
+    return'text-green-400'; // More than 3 days
+  };
+
+  const getDeadlineText=(deadline,done)=>{
+    if(!deadline)return'';
+    const days=daysTo(deadline);
+    if(days<0)return`ATRASADA ${Math.abs(days)}d`;
+    if(days===0)return'HOJE';
+    if(days===1)return'AMANHÃ';
+    return`${days} dias`;
+  };
 
   const monthDays=()=>{const y=month.getFullYear(),m=month.getMonth();const f=new Date(y,m,1),l=new Date(y,m+1,0);const d=[];for(let i=0;i<f.getDay();i++)d.push(null);for(let i=1;i<=l.getDate();i++)d.push({day:i,date:new Date(y,m,i).toISOString().split('T')[0]});return d;};
   const addEsc=()=>{if(!escDate)return;setEsc(p=>({...p,[escDate]:escType}));setModal(null);setEscDate('');};
-  const escStyle=(t)=>({branca:'bg-white text-gray-900',preta:'bg-gray-900 text-white border border-gray-600',vermelha:'bg-red-600 text-white',roxa:'bg-purple-600 text-white'}[t]||'bg-gray-800');
+  
+  const getEscStyle=(t,isCalendar=false)=>{
+    const styles={
+      branca:{bg:'bg-white',text:'text-gray-900',border:'border-white',glow:'shadow-white/50'},
+      preta:{bg:'bg-gray-900',text:'text-white',border:'border-gray-400',glow:'shadow-gray-400/50'},
+      vermelha:{bg:'bg-red-600',text:'text-white',border:'border-red-400',glow:'shadow-red-500/50'},
+      roxa:{bg:'bg-purple-600',text:'text-white',border:'border-purple-400',glow:'shadow-purple-500/50'}
+    };
+    return styles[t]||{bg:'bg-gray-800',text:'text-gray-400',border:'border-gray-700',glow:''};
+  };
+  
   const stageName=(s)=>['1ª Rev','2ª Rev','3ª Rev','4ª Rev','5ª Rev'][s]||'Manut.';
+
+  // Sort tasks: not done first (by priority then deadline), then done
+  const sortedTasks=[...tasks].sort((a,b)=>{
+    if(a.done!==b.done)return a.done?1:-1;
+    const prioOrder={alta:0,media:1,baixa:2};
+    if(prioOrder[a.priority]!==prioOrder[b.priority])return prioOrder[a.priority]-prioOrder[b.priority];
+    if(a.deadline&&b.deadline)return new Date(a.deadline)-new Date(b.deadline);
+    if(a.deadline)return -1;
+    if(b.deadline)return 1;
+    return 0;
+  });
 
   return(
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-20">
@@ -85,7 +191,7 @@ function App(){
       {modal==='study'&&(
         <div className="modal" onClick={()=>setModal(null)}>
           <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50 max-h-[90vh] overflow-auto" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVO ESTUDO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVO ESTUDO</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
             <div className="space-y-4">
               <select value={newSubj} onChange={e=>setNewSubj(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"><option value="">Matéria...</option>{SUBJ.map(s=><option key={s} value={s}>{s}</option>)}</select>
               {newSubj&&<>
@@ -103,7 +209,7 @@ function App(){
       {modal==='review'&&selRev&&(
         <div className="modal" onClick={()=>setModal(null)}>
           <div className="w-full max-w-md glass rounded-2xl p-6 border border-amber-500/50" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-amber-400">REVISÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-amber-400">REVISÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
               <p className="text-xs text-amber-500">{selRev.subj}</p>
               <p className="font-bold text-amber-400">{selRev.topic}</p>
@@ -121,11 +227,29 @@ function App(){
       {modal==='task'&&(
         <div className="modal" onClick={()=>setModal(null)}>
           <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVA MISSÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">NOVA MISSÃO</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
             <div className="space-y-4">
               <input value={taskForm.title} onChange={e=>setTaskForm({...taskForm,title:e.target.value})} placeholder="Título *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
-              <input type="date" value={taskForm.deadline} onChange={e=>setTaskForm({...taskForm,deadline:e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
-              <button onClick={addTask} disabled={!taskForm.title} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CRIAR</button>
+              <textarea value={taskForm.desc} onChange={e=>setTaskForm({...taskForm,desc:e.target.value})} placeholder="Descrição (opcional)" rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 resize-none"/>
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">PRAZO</label>
+                <input type="date" value={taskForm.deadline} onChange={e=>setTaskForm({...taskForm,deadline:e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">PRIORIDADE</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(PRIORITIES).map(([k,v])=>(
+                    <button key={k} onClick={()=>setTaskForm({...taskForm,priority:k})} className={`p-3 rounded-lg font-bold text-sm flex items-center justify-center gap-1 ${taskForm.priority===k?`${v.color} text-white`:'bg-gray-800 text-gray-400'}`}>
+                      <Icon name={v.icon} size={14}/>{v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3 text-xs text-gray-400">
+                <p>💰 XP ao completar: Alta +40 | Média +25 | Baixa +15</p>
+                <p className="text-red-400 mt-1">⚠ Perda por atraso: Alta -100 | Média -50 | Baixa -25</p>
+              </div>
+              <button onClick={addTask} disabled={!taskForm.title} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CRIAR MISSÃO</button>
             </div>
           </div>
         </div>
@@ -134,13 +258,16 @@ function App(){
       {modal==='esc'&&(
         <div className="modal" onClick={()=>setModal(null)}>
           <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
-            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">ESCALA</h2><button onClick={()=>setModal(null)} className="text-gray-400">✕</button></div>
+            <div className="flex justify-between mb-4"><h2 className="text-xl font-orbitron text-cyan-400">ESCALA</h2><button onClick={()=>setModal(null)} className="text-gray-400 text-xl">✕</button></div>
             <div className="space-y-4">
               <input type="date" value={escDate} onChange={e=>setEscDate(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
               <div className="grid grid-cols-2 gap-2">
-                {[{t:'branca',l:'Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>(
-                  <button key={x.t} onClick={()=>setEscType(x.t)} className={`p-3 rounded-lg font-bold text-sm ${escStyle(x.t)} ${escType===x.t?'ring-2 ring-cyan-500':''}`}>{x.l}</button>
-                ))}
+                {[{t:'branca',l:'Dia Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>{
+                  const st=getEscStyle(x.t);
+                  return(
+                    <button key={x.t} onClick={()=>setEscType(x.t)} className={`p-3 rounded-lg font-bold text-sm ${st.bg} ${st.text} border-2 ${escType===x.t?st.border+' shadow-lg '+st.glow:'border-transparent'}`}>{x.l}</button>
+                  );
+                })}
               </div>
               <button onClick={addEsc} disabled={!escDate} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">CONFIRMAR</button>
             </div>
@@ -264,20 +391,58 @@ function App(){
               </div>
               <div className="grid grid-cols-7 gap-1 mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-center text-[10px] text-gray-500 py-1">{d}</div>)}</div>
               <div className="grid grid-cols-7 gap-1">
-                {monthDays().map((d,i)=>{if(!d)return<div key={i} className="aspect-square"/>;const e=esc[d.date];return(
-                  <button key={d.date} onClick={()=>e?setEsc(p=>{const n={...p};delete n[d.date];return n;}):(setEscDate(d.date),setModal('esc'))} className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border ${e?escStyle(e):'bg-gray-800/50 border-gray-700 text-gray-400'} ${d.date===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
-                );})}
+                {monthDays().map((d,i)=>{
+                  if(!d)return<div key={i} className="aspect-square"/>;
+                  const e=esc[d.date];
+                  const st=e?getEscStyle(e):null;
+                  const isToday=d.date===today();
+                  return(
+                    <button 
+                      key={d.date} 
+                      onClick={()=>e?setEsc(p=>{const n={...p};delete n[d.date];return n;}):(setEscDate(d.date),setModal('esc'))} 
+                      className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                        e?`${st.bg} ${st.text} ${st.border} shadow-lg ${st.glow} duty-day`:'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500'
+                      } ${isToday?'ring-2 ring-cyan-500 ring-offset-2 ring-offset-[#0a0a0f]':''}`}
+                    >
+                      {d.day}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="glass rounded-xl p-4 border border-gray-700">
-              <p className="text-xs text-gray-500 mb-2">LEGENDA</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-white"/><span>Útil</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-gray-900 border border-gray-600"/><span>Sexta</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-600"/><span>FDS</span></div>
-                <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-purple-600"/><span>Feriado</span></div>
+              <p className="text-xs text-gray-500 mb-3">LEGENDA</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[{t:'branca',l:'Dia Útil'},{t:'preta',l:'Sexta'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriado'}].map(x=>{
+                  const st=getEscStyle(x.t);
+                  return(
+                    <div key={x.t} className="flex items-center gap-2">
+                      <div className={`w-6 h-6 rounded ${st.bg} ${st.border} border-2 shadow-md ${st.glow}`}/>
+                      <span className="text-sm">{x.l}</span>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-[10px] text-cyan-400 mt-3">⚡ Serviço = streak congelado</p>
+              <p className="text-[10px] text-cyan-400 mt-4">⚡ Serviço = streak de treino congelado</p>
+            </div>
+            {/* Escalas count */}
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-2">ESTE MÊS</p>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[{t:'branca',l:'Úteis'},{t:'preta',l:'Sextas'},{t:'vermelha',l:'FDS'},{t:'roxa',l:'Feriados'}].map(x=>{
+                  const count=Object.entries(esc).filter(([d,type])=>{
+                    const dt=new Date(d+'T00:00:00');
+                    return dt.getMonth()===month.getMonth()&&dt.getFullYear()===month.getFullYear()&&type===x.t;
+                  }).length;
+                  const st=getEscStyle(x.t);
+                  return(
+                    <div key={x.t} className="bg-gray-800/50 rounded-lg p-2">
+                      <p className={`text-xl font-bold ${st.text==='text-gray-900'?'text-white':st.text}`}>{count}</p>
+                      <p className="text-[9px] text-gray-500">{x.l}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -301,7 +466,7 @@ function App(){
               <p className="text-xs text-gray-500 mb-3">30 DIAS</p>
               <div className="grid grid-cols-7 gap-1">
                 {last30().map(d=>(
-                  <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${d.duty?'bg-purple-600/30 text-purple-400':d.ok?'bg-green-500 text-white':'bg-gray-800 text-gray-500'} ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
+                  <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${d.duty?'bg-purple-600/50 text-purple-300 border border-purple-500':d.ok?'bg-green-500 text-white':'bg-gray-800 text-gray-500'} ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
                 ))}
               </div>
             </div>
@@ -310,18 +475,61 @@ function App(){
 
         {tab==='missoes'&&(
           <div className="space-y-4">
-            <div className="flex justify-between items-center"><h1 className="text-xl font-orbitron font-bold">MISSÕES</h1><button onClick={()=>setModal('task')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center"><Icon name="Plus" size={20}/></button></div>
-            {tasks.length===0?<div className="glass rounded-xl p-8 border border-gray-700 text-center"><Icon name="ListTodo" size={40} className="mx-auto text-gray-600 mb-2"/><p className="text-gray-500">Nenhuma missão</p></div>:(
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-xl font-orbitron font-bold">MISSÕES</h1>
+                <p className="text-xs text-gray-500">{tasks.filter(t=>!t.done).length} pendentes</p>
+              </div>
+              <button onClick={()=>setModal('task')} className="w-10 h-10 rounded-lg bg-cyan-600 flex items-center justify-center"><Icon name="Plus" size={20}/></button>
+            </div>
+            
+            {tasks.length===0?(
+              <div className="glass rounded-xl p-8 border border-gray-700 text-center">
+                <Icon name="ListTodo" size={40} className="mx-auto text-gray-600 mb-2"/>
+                <p className="text-gray-500">Nenhuma missão</p>
+              </div>
+            ):(
               <div className="space-y-3">
-                {tasks.sort((a,b)=>a.done===b.done?0:a.done?1:-1).map(t=>(
-                  <div key={t.id} className={`glass rounded-xl p-4 border ${t.done?'border-gray-800 opacity-50':'border-gray-700'}`}>
-                    <div className="flex items-start gap-3">
-                      <button onClick={()=>togTask(t.id)} className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${t.done?'bg-green-500 border-green-500':'border-gray-600'}`}>{t.done&&<Icon name="Check" size={12}/>}</button>
-                      <div className="flex-1"><p className={`font-bold text-sm ${t.done?'line-through text-gray-500':''}`}>{t.title}</p>{t.deadline&&<p className="text-[10px] text-gray-500 mt-1">{fmtD(t.deadline)}</p>}</div>
-                      <button onClick={()=>setTasks(p=>p.filter(x=>x.id!==t.id))} className="text-gray-500"><Icon name="Trash2" size={16}/></button>
+                {sortedTasks.map(t=>{
+                  const prio=PRIORITIES[t.priority];
+                  const isExp=expandedTask===t.id;
+                  return(
+                    <div key={t.id} className={`glass rounded-xl border-l-4 ${prio.border} ${t.done?'opacity-50':''} overflow-hidden`}>
+                      <div className="p-4">
+                        <div className="flex items-start gap-3">
+                          <button onClick={()=>togTask(t.id)} className={`mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${t.done?'bg-green-500 border-green-500':'border-gray-600 hover:border-green-500'}`}>
+                            {t.done&&<Icon name="Check" size={14}/>}
+                          </button>
+                          <div className="flex-1 min-w-0" onClick={()=>setExpandedTask(isExp?null:t.id)}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${prio.color}`}>{prio.label}</span>
+                              {t.penalized&&<span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400">ATRASADA</span>}
+                            </div>
+                            <p className={`font-bold ${t.done?'line-through text-gray-500':''}`}>{t.title}</p>
+                            {t.deadline&&(
+                              <p className={`text-xs mt-1 flex items-center gap-1 ${getDeadlineColor(t.deadline,t.done)}`}>
+                                <Icon name="Clock" size={12}/> {fmtD(t.deadline)} • {getDeadlineText(t.deadline,t.done)}
+                              </p>
+                            )}
+                          </div>
+                          <button onClick={()=>setTasks(p=>p.filter(x=>x.id!==t.id))} className="text-gray-500 hover:text-red-400 flex-shrink-0">
+                            <Icon name="Trash2" size={16}/>
+                          </button>
+                        </div>
+                        {isExp&&t.desc&&(
+                          <div className="mt-3 pt-3 border-t border-gray-700">
+                            <p className="text-sm text-gray-400">{t.desc}</p>
+                          </div>
+                        )}
+                        {t.done&&t.completedAt&&(
+                          <p className="text-[10px] text-gray-500 mt-2">
+                            ⏱ Auto-remove em {Math.max(0,Math.ceil((t.completedAt+600000-Date.now())/60000))} min
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
