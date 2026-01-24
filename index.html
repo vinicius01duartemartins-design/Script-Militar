@@ -97,9 +97,19 @@ function App(){
     {id:3,nome:'3º Quarto',horarios:'11-13 | 17-19 | 23-01 | 05-07'}
   ];
 
-  const [data,setData]=useState({items:[],xp:0,hp:100,lv:1,debt:0});
+  const [data,setData]=useState({
+    items:[
+      {id:1,subj:'Direito Penal',topic:'Aula 1 - Cap Matta',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]},
+      {id:2,subj:'Didática',topic:'Aula 1 Cap Mathias',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]},
+      {id:3,subj:'Gestão Contemporânea',topic:'História da gestão',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]}
+    ],
+    xp:150,hp:100,lv:1,debt:0
+  });
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
-  const [tasks,setTasks]=useState([]);
+  const [tasks,setTasks]=useState([
+    {id:1,title:'Organizar armário',desc:'',deadline:'2025-01-25',priority:'alta',done:false,penalized:false,createdAt:Date.now()},
+    {id:2,title:'Lavar roupas',desc:'',deadline:'2025-01-25',priority:'media',done:false,penalized:false,createdAt:Date.now()}
+  ]);
   const [escalas,setEscalas]=useState([]);
   const [config,setConfig]=useState({usarPostosNovos:false});
 
@@ -137,11 +147,61 @@ function App(){
     return()=>clearInterval(interval);
   },[]);
 
-  const today=()=>new Date().toISOString().split('T')[0];
-  const addD=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];};
-  const fmtD=(d)=>new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
-  const fmtDFull=(d)=>new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
-  const daysTo=(d)=>Math.ceil((new Date(d+'T00:00:00')-new Date(today()+'T00:00:00'))/86400000);
+  // Brasilia timezone (UTC-3)
+  const getBrasiliaDate=()=>{
+    const now=new Date();
+    const brasilia=new Date(now.toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+    return brasilia;
+  };
+  const today=()=>{
+    const d=getBrasiliaDate();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const addD=(d,n)=>{const dt=new Date(d+'T12:00:00');dt.setDate(dt.getDate()+n);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;};
+  const fmtD=(d)=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  const fmtDFull=(d)=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
+  const daysTo=(d)=>{
+    const target=new Date(d+'T12:00:00');
+    const now=new Date(today()+'T12:00:00');
+    return Math.round((target-now)/86400000);
+  };
+  
+  // Backup functions
+  const exportBackup=()=>{
+    const backup={
+      version:'hv5',
+      exportDate:new Date().toISOString(),
+      data,ex,tasks,escalas,config
+    };
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`hunter-backup-${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('Backup exportado com sucesso!');
+  };
+  
+  const importBackup=(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(evt)=>{
+      try{
+        const backup=JSON.parse(evt.target.result);
+        if(backup.data)setData(backup.data);
+        if(backup.ex)setEx(backup.ex);
+        if(backup.tasks)setTasks(backup.tasks);
+        if(backup.escalas)setEscalas(backup.escalas);
+        if(backup.config)setConfig(backup.config);
+        alert('Backup importado com sucesso!');
+      }catch(err){
+        alert('Erro ao importar backup: arquivo inválido');
+      }
+    };
+    reader.readAsText(file);
+  };
   const hasEscala=(d)=>escalas.some(e=>e.date===d);
   const getEscalaByDate=(d)=>escalas.find(e=>e.date===d);
   const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
@@ -913,6 +973,22 @@ function App(){
                 <div className="bg-gray-800/50 rounded-lg p-3 text-center"><p className="text-2xl font-bold text-amber-400">{data.items.reduce((a,i)=>a+i.revs.length,0)}</p><p className="text-xs text-gray-500">Revisões</p></div>
               </div>
             </div>
+            
+            {/* Backup Section */}
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-3">BACKUP</p>
+              <div className="space-y-2">
+                <button onClick={exportBackup} className="w-full py-3 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 font-bold flex items-center justify-center gap-2">
+                  <Icon name="Download" size={18}/>EXPORTAR BACKUP
+                </button>
+                <label className="w-full py-3 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold flex items-center justify-center gap-2 cursor-pointer">
+                  <Icon name="Upload" size={18}/>IMPORTAR BACKUP
+                  <input type="file" accept=".json" onChange={importBackup} className="hidden"/>
+                </label>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-2 text-center">💡 Exporte antes de atualizar o app!</p>
+            </div>
+            
             <div className="glass rounded-xl p-4 border border-gray-700">
               <p className="text-xs text-gray-500 mb-3">EBBINGHAUS</p>
               <div className="space-y-2 text-sm">{INT.map((d,i)=>(<div key={i} className="flex justify-between bg-gray-800/50 rounded-lg p-2"><span className="text-gray-400">{i+1}ª Rev</span><span className="text-cyan-400">{d}d</span></div>))}</div>
