@@ -116,6 +116,40 @@ function App(){
   useEffect(()=>{const s=localStorage.getItem('hv5');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.escalas)setEscalas(p.escalas);if(p.config)setConfig(p.config);}},[]);
   useEffect(()=>{localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config]);
 
+  // Check missed training days and apply punishment
+  useEffect(()=>{
+    const checkMissedTraining=()=>{
+      const yesterday=addD(today(),-1);
+      const lastCheck=localStorage.getItem('lastTrainCheck');
+      
+      // Only check once per day
+      if(lastCheck===today())return;
+      localStorage.setItem('lastTrainCheck',today());
+      
+      // Skip if yesterday was a duty day
+      if(hasEscala(yesterday))return;
+      
+      // Check if trained yesterday
+      const trainedYesterday=ex.hist.find(h=>h.d===yesterday)?.ok;
+      
+      if(!trainedYesterday){
+        // Punishment for not training
+        const xpLoss=30;
+        const hpLoss=15;
+        setData(d=>({
+          ...d,
+          xp:Math.max(0,d.xp-xpLoss),
+          hp:Math.max(0,d.hp-hpLoss)
+        }));
+        alert(`⚠️ PUNIÇÃO: Você não treinou ontem!\n-${xpLoss} XP | -${hpLoss} HP`);
+      }
+    };
+    
+    // Small delay to ensure data is loaded
+    const timer=setTimeout(checkMissedTraining,1000);
+    return()=>clearTimeout(timer);
+  },[ex.hist,escalas]);
+
   // Auto-delete completed tasks after 10 minutes & check overdue tasks
   useEffect(()=>{
     const interval=setInterval(()=>{
@@ -205,7 +239,24 @@ function App(){
   const hasEscala=(d)=>escalas.some(e=>e.date===d);
   const getEscalaByDate=(d)=>escalas.find(e=>e.date===d);
   const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
-  const dmg=(a)=>setData(p=>{const h=Math.max(0,p.hp-a);if(h===0&&p.lv>1){alert('LEVEL DOWN!');return{...p,hp:100,lv:p.lv-1,xp:Math.max(0,p.xp-300)};}return{...p,hp:h};});
+  const dmg=(a)=>setData(p=>{
+    const h=Math.max(0,p.hp-a);
+    if(h===0&&p.lv>1){
+      alert('💀 LEVEL DOWN! HP zerou!');
+      return{...p,hp:100,lv:p.lv-1,xp:Math.max(0,p.xp-300)};
+    }
+    return{...p,hp:h};
+  });
+
+  // Training rewards/punishments config
+  const TRAIN_REWARD_XP=40;
+  const TRAIN_REWARD_HP=15;
+  const STUDY_REWARD_XP=50;
+  const STUDY_REWARD_HP=10;
+  const REVIEW_REWARD_XP=40;
+  const REVIEW_REWARD_HP=5;
+  const MISS_TRAIN_XP=30;
+  const MISS_TRAIN_HP=15;
 
   const rank=RANKS.find(r=>data.xp>=r.min&&data.xp<=r.max)||RANKS[0];
   const nextR=RANKS[RANKS.findIndex(r=>r.n===rank.n)+1];
@@ -213,12 +264,75 @@ function App(){
   const pend=data.items.filter(i=>i.next<=today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
   const upcoming=data.items.filter(i=>i.next>today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
 
-  const addStudy=()=>{if(!form.topic||!form.mins||!newSubj)return;const t=today();setData(p=>({...p,items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],xp:p.xp+50}));heal(10);setForm({topic:'',mins:'',conf:3});setNewSubj('');setModal(null);};
-  const doReview=()=>{if(!form.mins||!selRev)return;const t=today();const ns=selRev.stage+1;const ni=ns<INT.length?INT[ns]:45;setData(p=>({...p,items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),xp:p.xp+40}));heal(5);setForm({topic:'',mins:'',conf:3});setSelRev(null);setModal(null);};
+  const addStudy=()=>{
+    if(!form.topic||!form.mins||!newSubj)return;
+    const t=today();
+    setData(p=>({
+      ...p,
+      items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],
+      xp:p.xp+STUDY_REWARD_XP,
+      hp:Math.min(100,p.hp+STUDY_REWARD_HP)
+    }));
+    setForm({topic:'',mins:'',conf:3});
+    setNewSubj('');
+    setModal(null);
+  };
+  const doReview=()=>{
+    if(!form.mins||!selRev)return;
+    const t=today();
+    const ns=selRev.stage+1;
+    const ni=ns<INT.length?INT[ns]:45;
+    setData(p=>({
+      ...p,
+      items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),
+      xp:p.xp+REVIEW_REWARD_XP,
+      hp:Math.min(100,p.hp+REVIEW_REWARD_HP)
+    }));
+    setForm({topic:'',mins:'',conf:3});
+    setSelRev(null);
+    setModal(null);
+  };
   const skipRev=()=>{dmg(5);setData(p=>({...p,xp:Math.max(0,p.xp-25),debt:p.debt+20}));setModal('punish');};
   const doPush=()=>{setData(p=>({...p,debt:0,xp:p.xp+10}));heal(5);setModal(null);};
 
-  const togEx=(d)=>{if(hasEscala(d))return;let h=[...ex.hist];const i=h.findIndex(x=>x.d===d);let xc=0;if(i>=0){h[i]={...h[i],ok:!h[i].ok};xc=h[i].ok?40:-40;if(h[i].ok)heal(10);}else{h=[{d,ok:true},...h];xc=40;heal(10);}let s=0;for(let j=0;j<100;j++){const dd=addD(today(),-j);if(hasEscala(dd))continue;const e=h.find(x=>x.d===dd);if(e?.ok)s++;else break;}setEx({hist:h,streak:s,best:Math.max(ex.best,s)});setData(p=>({...p,xp:Math.max(0,p.xp+xc)}));};
+  const togEx=(d)=>{
+    if(hasEscala(d))return;
+    let h=[...ex.hist];
+    const i=h.findIndex(x=>x.d===d);
+    let xc=0;
+    let hpChange=0;
+    
+    if(i>=0){
+      h[i]={...h[i],ok:!h[i].ok};
+      if(h[i].ok){
+        xc=TRAIN_REWARD_XP;
+        hpChange=TRAIN_REWARD_HP;
+      }else{
+        xc=-TRAIN_REWARD_XP;
+      }
+    }else{
+      h=[{d,ok:true},...h];
+      xc=TRAIN_REWARD_XP;
+      hpChange=TRAIN_REWARD_HP;
+    }
+    
+    // Calculate streak
+    let s=0;
+    for(let j=0;j<100;j++){
+      const dd=addD(today(),-j);
+      if(hasEscala(dd))continue;
+      const e=h.find(x=>x.d===dd);
+      if(e?.ok)s++;
+      else break;
+    }
+    
+    setEx({hist:h,streak:s,best:Math.max(ex.best,s)});
+    setData(p=>({
+      ...p,
+      xp:Math.max(0,p.xp+xc),
+      hp:hpChange>0?Math.min(100,p.hp+hpChange):p.hp
+    }));
+  };
   const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:hasEscala(ds),day:x.getDate()});}return d;};
 
   const addTask=()=>{
@@ -594,8 +708,14 @@ function App(){
               <div>
                 <div className="flex justify-between text-[10px] mb-1"><span className="text-red-400">HP</span><span className="text-red-400">{data.hp}/100</span></div>
                 <div className="w-full bg-gray-800/50 rounded-full h-2.5 border border-red-500/30"><div className={`hp-bar h-full rounded-full transition-all ${data.hp<=20?'animate-pulse':''}`} style={{width:`${data.hp}%`}}/></div>
-                {data.hp<=20&&<p className="text-red-500 text-[10px] mt-1 animate-pulse">⚠ HP CRÍTICO</p>}
+                {data.hp<=20&&<p className="text-red-500 text-[10px] mt-1 animate-pulse">⚠ HP CRÍTICO - Estude ou treine para recuperar!</p>}
               </div>
+              {data.hp<100&&(
+                <div className="mt-3 p-2 bg-gray-800/50 rounded-lg">
+                  <p className="text-[10px] text-gray-400">💪 Recupere HP:</p>
+                  <p className="text-[10px] text-green-400">Treino +{TRAIN_REWARD_HP} | Estudo +{STUDY_REWARD_HP} | Revisão +{REVIEW_REWARD_HP}</p>
+                </div>
+              )}
               {data.debt>0&&<button onClick={()=>setModal('punish')} className="w-full mt-4 py-2 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">DÍVIDA: {data.debt} FLEXÕES</button>}
             </div>
 
@@ -894,6 +1014,16 @@ function App(){
                 {last30().map(d=>(
                   <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${d.duty?'bg-purple-600/50 text-purple-300 border border-purple-500':d.ok?'bg-green-500 text-white':'bg-gray-800 text-gray-500'} ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
                 ))}
+              </div>
+            </div>
+            
+            {/* Punishment/Reward Info */}
+            <div className="glass rounded-xl p-4 border border-amber-500/30">
+              <p className="text-xs text-amber-400 font-bold mb-2">⚔️ SISTEMA DE TREINO</p>
+              <div className="space-y-1 text-xs">
+                <p className="text-green-400">✓ Treinou: +{TRAIN_REWARD_XP} XP | +{TRAIN_REWARD_HP} HP</p>
+                <p className="text-red-400">✗ Não treinou: -{MISS_TRAIN_XP} XP | -{MISS_TRAIN_HP} HP</p>
+                <p className="text-purple-400">🛡 Serviço: Dia ignorado (sem punição)</p>
               </div>
             </div>
           </div>
