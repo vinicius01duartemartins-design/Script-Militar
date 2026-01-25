@@ -52,8 +52,40 @@ function App(){
 
   const INT=[1,7,15,30,45];
   const SUBJ=['Comunicação e Expressão','Didática','Lógica','Metodologia Científica','Psicologia','Chefia e Liderança','Escrituração Profissional','TIC','Gestão Contemporânea','Gestão de Pessoas','Direito Administrativo','Direito Adm. Disciplinar Militar','Direito Penal','Direito Penal Militar','Doutrina de Polícia Ostensiva'];
-  const RANKS=[{n:'E',min:0,max:299,c:'#6B7280',t:'Iniciante'},{n:'D',min:300,max:799,c:'#10B981',t:'Promissor'},{n:'C',min:800,max:1799,c:'#3B82F6',t:'Competente'},{n:'B',min:1800,max:3499,c:'#8B5CF6',t:'Elite'},{n:'A',min:3500,max:5999,c:'#EF4444',t:'Nacional'},{n:'S',min:6000,max:99999,c:'#F59E0B',t:'Shadow Monarch'}];
   const PRIORITIES={alta:{label:'Alta',color:'bg-red-500',border:'border-red-500',icon:'AlertTriangle'},media:{label:'Média',color:'bg-amber-500',border:'border-amber-500',icon:'Minus'},baixa:{label:'Baixa',color:'bg-blue-500',border:'border-blue-500',icon:'ChevronDown'}};
+
+  // Level system - XP needed per level increases
+  const getXpForLevel=(lv)=>lv*100; // Level 1=100, Level 2=200, Level 3=300...
+  const getTotalXpForLevel=(lv)=>{
+    let total=0;
+    for(let i=1;i<lv;i++)total+=getXpForLevel(i);
+    return total;
+  };
+  const getLevelFromTotalXp=(totalXp)=>{
+    let lv=1;
+    let xpNeeded=0;
+    while(xpNeeded+getXpForLevel(lv)<=totalXp){
+      xpNeeded+=getXpForLevel(lv);
+      lv++;
+    }
+    return lv;
+  };
+  const getLevelColor=(lv)=>{
+    if(lv>=50)return'#F59E0B'; // Gold
+    if(lv>=40)return'#EF4444'; // Red
+    if(lv>=30)return'#8B5CF6'; // Purple
+    if(lv>=20)return'#3B82F6'; // Blue
+    if(lv>=10)return'#10B981'; // Green
+    return'#6B7280'; // Gray
+  };
+  const getLevelTitle=(lv)=>{
+    if(lv>=50)return'Shadow Monarch';
+    if(lv>=40)return'Nacional';
+    if(lv>=30)return'Elite';
+    if(lv>=20)return'Competente';
+    if(lv>=10)return'Promissor';
+    return'Iniciante';
+  };
 
   // Turmas
   const TURMAS=[
@@ -103,7 +135,10 @@ function App(){
       {id:2,subj:'Didática',topic:'Aula 1 Cap Mathias',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]},
       {id:3,subj:'Gestão Contemporânea',topic:'História da gestão',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]}
     ],
-    xp:150,hp:100,lv:1,debt:0
+    totalXp:150,hp:100,debt:0,
+    fisica:0,    // Physical stat - resets monthly
+    mental:0,    // Mental stat - resets monthly
+    lastStatReset:null  // Track last reset date
   });
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
   const [tasks,setTasks]=useState([
@@ -115,6 +150,24 @@ function App(){
 
   useEffect(()=>{const s=localStorage.getItem('hv5');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.escalas)setEscalas(p.escalas);if(p.config)setConfig(p.config);}},[]);
   useEffect(()=>{localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config]);
+
+  // Check and reset monthly stats on day 1
+  useEffect(()=>{
+    const currentMonth=`${getBrasiliaDate().getFullYear()}-${getBrasiliaDate().getMonth()+1}`;
+    if(data.lastStatReset!==currentMonth){
+      const isFirstDay=getBrasiliaDate().getDate()===1;
+      // Reset if it's a new month (either day 1 or first time opening in new month)
+      if(data.lastStatReset&&data.lastStatReset!==currentMonth){
+        setData(d=>({...d,fisica:0,mental:0,lastStatReset:currentMonth}));
+        if(isFirstDay){
+          alert('🔄 Novo mês! Stats de Física e Mental foram resetados!');
+        }
+      }else if(!data.lastStatReset){
+        // First time - just set the month
+        setData(d=>({...d,lastStatReset:currentMonth}));
+      }
+    }
+  },[data.lastStatReset]);
 
   // Check missed training days and apply punishment
   useEffect(()=>{
@@ -138,7 +191,7 @@ function App(){
         const hpLoss=15;
         setData(d=>({
           ...d,
-          xp:Math.max(0,d.xp-xpLoss),
+          totalXp:Math.max(0,d.totalXp-xpLoss),
           hp:Math.max(0,d.hp-hpLoss)
         }));
         alert(`⚠️ PUNIÇÃO: Você não treinou ontem!\n-${xpLoss} XP | -${hpLoss} HP`);
@@ -172,7 +225,7 @@ function App(){
           return t;
         });
         if(xpLoss>0){
-          setData(d=>({...d,xp:Math.max(0,d.xp-xpLoss)}));
+          setData(d=>({...d,totalXp:Math.max(0,d.totalXp-xpLoss)}));
           alert(`PRAZO PERDIDO! -${xpLoss} XP`);
         }
         return newTasks;
@@ -241,9 +294,15 @@ function App(){
   const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
   const dmg=(a)=>setData(p=>{
     const h=Math.max(0,p.hp-a);
-    if(h===0&&p.lv>1){
-      alert('💀 LEVEL DOWN! HP zerou!');
-      return{...p,hp:100,lv:p.lv-1,xp:Math.max(0,p.xp-300)};
+    if(h===0){
+      const currentLv=getLevelFromTotalXp(p.totalXp);
+      if(currentLv>1){
+        // Lose XP equivalent to half of current level requirement
+        const xpLoss=Math.floor(getXpForLevel(currentLv)/2);
+        alert(`💀 HP ZEROU! Perdeu ${xpLoss} XP!`);
+        return{...p,hp:100,totalXp:Math.max(0,p.totalXp-xpLoss)};
+      }
+      return{...p,hp:100};
     }
     return{...p,hp:h};
   });
@@ -251,28 +310,47 @@ function App(){
   // Training rewards/punishments config
   const TRAIN_REWARD_XP=40;
   const TRAIN_REWARD_HP=15;
+  const TRAIN_REWARD_FISICA=10;  // Physical stat gain
   const STUDY_REWARD_XP=50;
   const STUDY_REWARD_HP=10;
+  const STUDY_REWARD_MENTAL=10;  // Mental stat gain
   const REVIEW_REWARD_XP=40;
   const REVIEW_REWARD_HP=5;
+  const REVIEW_REWARD_MENTAL=5;  // Mental stat gain
   const MISS_TRAIN_XP=30;
   const MISS_TRAIN_HP=15;
+  
+  // Computed level values
+  const currentLevel=getLevelFromTotalXp(data.totalXp);
+  const xpForCurrentLevel=getTotalXpForLevel(currentLevel);
+  const xpForNextLevel=getTotalXpForLevel(currentLevel+1);
+  const xpInCurrentLevel=data.totalXp-xpForCurrentLevel;
+  const xpNeededForNext=xpForNextLevel-xpForCurrentLevel;
+  const levelProgress=(xpInCurrentLevel/xpNeededForNext)*100;
+  const levelColor=getLevelColor(currentLevel);
+  const levelTitle=getLevelTitle(currentLevel);
 
-  const rank=RANKS.find(r=>data.xp>=r.min&&data.xp<=r.max)||RANKS[0];
-  const nextR=RANKS[RANKS.findIndex(r=>r.n===rank.n)+1];
-  const prog=nextR?((data.xp-rank.min)/(rank.max-rank.min+1))*100:100;
   const pend=data.items.filter(i=>i.next<=today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
   const upcoming=data.items.filter(i=>i.next>today()).sort((a,b)=>new Date(a.next)-new Date(b.next));
 
   const addStudy=()=>{
     if(!form.topic||!form.mins||!newSubj)return;
     const t=today();
-    setData(p=>({
-      ...p,
-      items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],
-      xp:p.xp+STUDY_REWARD_XP,
-      hp:Math.min(100,p.hp+STUDY_REWARD_HP)
-    }));
+    const oldLevel=currentLevel;
+    setData(p=>{
+      const newTotalXp=p.totalXp+STUDY_REWARD_XP;
+      const newLevel=getLevelFromTotalXp(newTotalXp);
+      if(newLevel>oldLevel){
+        setTimeout(()=>alert(`🎉 LEVEL UP! Você agora é nível ${newLevel}!`),100);
+      }
+      return{
+        ...p,
+        items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],
+        totalXp:newTotalXp,
+        hp:Math.min(100,p.hp+STUDY_REWARD_HP),
+        mental:p.mental+STUDY_REWARD_MENTAL
+      };
+    });
     setForm({topic:'',mins:'',conf:3});
     setNewSubj('');
     setModal(null);
@@ -282,18 +360,34 @@ function App(){
     const t=today();
     const ns=selRev.stage+1;
     const ni=ns<INT.length?INT[ns]:45;
-    setData(p=>({
-      ...p,
-      items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),
-      xp:p.xp+REVIEW_REWARD_XP,
-      hp:Math.min(100,p.hp+REVIEW_REWARD_HP)
-    }));
+    const oldLevel=currentLevel;
+    setData(p=>{
+      const newTotalXp=p.totalXp+REVIEW_REWARD_XP;
+      const newLevel=getLevelFromTotalXp(newTotalXp);
+      if(newLevel>oldLevel){
+        setTimeout(()=>alert(`🎉 LEVEL UP! Você agora é nível ${newLevel}!`),100);
+      }
+      return{
+        ...p,
+        items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),
+        totalXp:newTotalXp,
+        hp:Math.min(100,p.hp+REVIEW_REWARD_HP),
+        mental:p.mental+REVIEW_REWARD_MENTAL
+      };
+    });
     setForm({topic:'',mins:'',conf:3});
     setSelRev(null);
     setModal(null);
   };
-  const skipRev=()=>{dmg(5);setData(p=>({...p,xp:Math.max(0,p.xp-25),debt:p.debt+20}));setModal('punish');};
-  const doPush=()=>{setData(p=>({...p,debt:0,xp:p.xp+10}));heal(5);setModal(null);};
+  const skipRev=()=>{
+    dmg(5);
+    setData(p=>({...p,totalXp:Math.max(0,p.totalXp-25),debt:p.debt+20}));
+    setModal('punish');
+  };
+  const doPush=()=>{
+    setData(p=>({...p,debt:0,totalXp:p.totalXp+10,hp:Math.min(100,p.hp+5)}));
+    setModal(null);
+  };
 
   const togEx=(d)=>{
     if(hasEscala(d))return;
@@ -301,19 +395,23 @@ function App(){
     const i=h.findIndex(x=>x.d===d);
     let xc=0;
     let hpChange=0;
+    let fisicaChange=0;
     
     if(i>=0){
       h[i]={...h[i],ok:!h[i].ok};
       if(h[i].ok){
         xc=TRAIN_REWARD_XP;
         hpChange=TRAIN_REWARD_HP;
+        fisicaChange=TRAIN_REWARD_FISICA;
       }else{
         xc=-TRAIN_REWARD_XP;
+        fisicaChange=-TRAIN_REWARD_FISICA;
       }
     }else{
       h=[{d,ok:true},...h];
       xc=TRAIN_REWARD_XP;
       hpChange=TRAIN_REWARD_HP;
+      fisicaChange=TRAIN_REWARD_FISICA;
     }
     
     // Calculate streak
@@ -327,11 +425,20 @@ function App(){
     }
     
     setEx({hist:h,streak:s,best:Math.max(ex.best,s)});
-    setData(p=>({
-      ...p,
-      xp:Math.max(0,p.xp+xc),
-      hp:hpChange>0?Math.min(100,p.hp+hpChange):p.hp
-    }));
+    const oldLevel=currentLevel;
+    setData(p=>{
+      const newTotalXp=Math.max(0,p.totalXp+xc);
+      const newLevel=getLevelFromTotalXp(newTotalXp);
+      if(newLevel>oldLevel&&xc>0){
+        setTimeout(()=>alert(`🎉 LEVEL UP! Você agora é nível ${newLevel}!`),100);
+      }
+      return{
+        ...p,
+        totalXp:newTotalXp,
+        hp:hpChange>0?Math.min(100,p.hp+hpChange):p.hp,
+        fisica:Math.max(0,p.fisica+fisicaChange)
+      };
+    });
   };
   const last30=()=>{const d=[];const t=new Date();for(let i=29;i>=0;i--){const x=new Date(t);x.setDate(x.getDate()-i);const ds=x.toISOString().split('T')[0];d.push({d:ds,ok:ex.hist.find(h=>h.d===ds)?.ok||false,duty:hasEscala(ds),day:x.getDate()});}return d;};
 
@@ -347,12 +454,11 @@ function App(){
       if(t.id===id){
         if(!t.done){
           const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
-          setData(d=>({...d,xp:d.xp+xpGain}));
-          heal(5);
+          setData(d=>({...d,totalXp:d.totalXp+xpGain,hp:Math.min(100,d.hp+5)}));
           return{...t,done:true,completedAt:Date.now()};
         }else{
           const xpGain=t.priority==='alta'?40:t.priority==='media'?25:15;
-          setData(d=>({...d,xp:Math.max(0,d.xp-xpGain)}));
+          setData(d=>({...d,totalXp:Math.max(0,d.totalXp-xpGain)}));
           return{...t,done:false,completedAt:null};
         }
       }
@@ -463,7 +569,7 @@ function App(){
                 <input value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="Tópico *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
                 <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
                 <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-cyan-500':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
-                <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP</button>
+                <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP +10🧠</button>
               </>}
             </div>
           </div>
@@ -482,7 +588,7 @@ function App(){
             <div className="space-y-4">
               <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
               <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-amber-500 text-black':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
-              <button onClick={doReview} disabled={!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-amber-500 to-orange-500 text-black disabled:opacity-50">COMPLETAR +40 XP</button>
+              <button onClick={doReview} disabled={!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-amber-500 to-orange-500 text-black disabled:opacity-50">COMPLETAR +40 XP +5🧠</button>
             </div>
           </div>
         </div>
@@ -691,25 +797,53 @@ function App(){
             <div className="glass rounded-2xl p-5 border border-cyan-500/30">
               <div className="flex justify-between mb-4">
                 <div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-orbitron font-black mb-2" style={{backgroundColor:rank.c,boxShadow:`0 0 20px ${rank.c}`}}>{rank.n}</div>
-                  <h2 className="text-lg font-orbitron font-bold" style={{color:rank.c}}>RANK {rank.n}</h2>
-                  <p className="text-gray-500 text-xs">{rank.t}</p>
-                  <p className="text-cyan-400 text-xs mt-1">LV {data.lv}</p>
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-orbitron font-black mb-2" style={{backgroundColor:levelColor,boxShadow:`0 0 20px ${levelColor}`}}>{currentLevel}</div>
+                  <h2 className="text-lg font-orbitron font-bold" style={{color:levelColor}}>NÍVEL {currentLevel}</h2>
+                  <p className="text-gray-500 text-xs">{levelTitle}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-purple-400">{data.xp}</p>
-                  <p className="text-[10px] text-gray-500">XP</p>
+                  <p className="text-2xl font-bold text-purple-400">{data.totalXp}</p>
+                  <p className="text-[10px] text-gray-500">XP TOTAL</p>
                 </div>
               </div>
+              
+              {/* XP Progress */}
               <div className="mb-3">
-                <div className="flex justify-between text-[10px] text-gray-500 mb-1"><span>XP</span><span>{nextR?`${nextR.min-data.xp}→${nextR.n}`:'MAX'}</span></div>
-                <div className="w-full bg-gray-800 rounded-full h-2.5"><div className="xp-bar h-full rounded-full transition-all" style={{width:`${prog}%`}}/></div>
+                <div className="flex justify-between text-[10px] text-gray-500 mb-1"><span>XP</span><span>{xpInCurrentLevel}/{xpNeededForNext} → LV {currentLevel+1}</span></div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5"><div className="xp-bar h-full rounded-full transition-all" style={{width:`${levelProgress}%`}}/></div>
               </div>
-              <div>
-                <div className="flex justify-between text-[10px] mb-1"><span className="text-red-400">HP</span><span className="text-red-400">{data.hp}/100</span></div>
+              
+              {/* HP */}
+              <div className="mb-3">
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-red-400">❤️ HP</span><span className="text-red-400">{data.hp}/100</span></div>
                 <div className="w-full bg-gray-800/50 rounded-full h-2.5 border border-red-500/30"><div className={`hp-bar h-full rounded-full transition-all ${data.hp<=20?'animate-pulse':''}`} style={{width:`${data.hp}%`}}/></div>
-                {data.hp<=20&&<p className="text-red-500 text-[10px] mt-1 animate-pulse">⚠ HP CRÍTICO - Estude ou treine para recuperar!</p>}
               </div>
+              
+              {/* Monthly Stats */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-orange-400">💪 FÍSICA</span>
+                    <span className="text-orange-400 font-bold">{data.fisica||0}</span>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-1.5">
+                    <div className="bg-gradient-to-r from-orange-500 to-red-500 h-full rounded-full transition-all" style={{width:`${Math.min(100,(data.fisica||0))}%`}}/>
+                  </div>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-blue-400">🧠 MENTAL</span>
+                    <span className="text-blue-400 font-bold">{data.mental||0}</span>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-1.5">
+                    <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-full rounded-full transition-all" style={{width:`${Math.min(100,(data.mental||0))}%`}}/>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[9px] text-gray-500 text-center mt-2">📅 Stats resetam dia 1 de cada mês</p>
+              
+              {data.hp<=20&&<p className="text-red-500 text-[10px] mt-2 animate-pulse">⚠ HP CRÍTICO - Estude ou treine para recuperar!</p>}
+              
               {data.hp<100&&(
                 <div className="mt-3 p-2 bg-gray-800/50 rounded-lg">
                   <p className="text-[10px] text-gray-400">💪 Recupere HP:</p>
@@ -720,7 +854,7 @@ function App(){
             </div>
 
             <button onClick={()=>setModal('study')} className="w-full py-4 rounded-xl font-orbitron font-bold bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center gap-2">
-              <Icon name="Plus" size={20}/> NOVO ESTUDO <span className="text-cyan-200 text-sm">+50 XP</span>
+              <Icon name="Plus" size={20}/> NOVO ESTUDO <span className="text-cyan-200 text-sm">+50 XP +10🧠</span>
             </button>
 
             {pend.length>0&&(
@@ -1021,7 +1155,7 @@ function App(){
             <div className="glass rounded-xl p-4 border border-amber-500/30">
               <p className="text-xs text-amber-400 font-bold mb-2">⚔️ SISTEMA DE TREINO</p>
               <div className="space-y-1 text-xs">
-                <p className="text-green-400">✓ Treinou: +{TRAIN_REWARD_XP} XP | +{TRAIN_REWARD_HP} HP</p>
+                <p className="text-green-400">✓ Treinou: +{TRAIN_REWARD_XP} XP | +{TRAIN_REWARD_HP} HP | +{TRAIN_REWARD_FISICA} 💪</p>
                 <p className="text-red-400">✗ Não treinou: -{MISS_TRAIN_XP} XP | -{MISS_TRAIN_HP} HP</p>
                 <p className="text-purple-400">🛡 Serviço: Dia ignorado (sem punição)</p>
               </div>
@@ -1095,12 +1229,56 @@ function App(){
           <div className="space-y-4">
             <div className="glass rounded-xl p-6 border border-gray-700">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-orbitron font-black" style={{backgroundColor:rank.c,boxShadow:`0 0 20px ${rank.c}`}}>{rank.n}</div>
-                <div><h2 className="text-xl font-orbitron font-bold" style={{color:rank.c}}>RANK {rank.n}</h2><p className="text-gray-500 text-sm">{rank.t}</p><p className="text-cyan-400 text-sm">LV {data.lv} • {data.xp} XP</p></div>
+                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-orbitron font-black" style={{backgroundColor:levelColor,boxShadow:`0 0 20px ${levelColor}`}}>{currentLevel}</div>
+                <div>
+                  <h2 className="text-xl font-orbitron font-bold" style={{color:levelColor}}>NÍVEL {currentLevel}</h2>
+                  <p className="text-gray-500 text-sm">{levelTitle}</p>
+                  <p className="text-cyan-400 text-sm">{data.totalXp} XP Total</p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-800/50 rounded-lg p-3 text-center"><p className="text-2xl font-bold text-cyan-400">{data.items.length}</p><p className="text-xs text-gray-500">Tópicos</p></div>
                 <div className="bg-gray-800/50 rounded-lg p-3 text-center"><p className="text-2xl font-bold text-amber-400">{data.items.reduce((a,i)=>a+i.revs.length,0)}</p><p className="text-xs text-gray-500">Revisões</p></div>
+              </div>
+            </div>
+            
+            {/* Monthly Stats */}
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <div className="flex justify-between items-center mb-3">
+                <p className="text-xs text-gray-500">STATS DO MÊS</p>
+                <p className="text-[10px] text-gray-500">Reseta dia 1</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-orange-400">{data.fisica||0}</p>
+                  <p className="text-xs text-orange-300 mt-1">💪 FÍSICA</p>
+                  <p className="text-[10px] text-gray-500 mt-1">+{TRAIN_REWARD_FISICA} por treino</p>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-blue-400">{data.mental||0}</p>
+                  <p className="text-xs text-blue-300 mt-1">🧠 MENTAL</p>
+                  <p className="text-[10px] text-gray-500 mt-1">+{STUDY_REWARD_MENTAL} estudo | +{REVIEW_REWARD_MENTAL} rev</p>
+                </div>
+              </div>
+              {(data.fisica||0)>(data.mental||0)*1.5&&<p className="text-[10px] text-orange-400 mt-2 text-center">⚠️ Foco maior em treino! Equilibre com estudos.</p>}
+              {(data.mental||0)>(data.fisica||0)*1.5&&<p className="text-[10px] text-blue-400 mt-2 text-center">⚠️ Foco maior em estudo! Equilibre com treinos.</p>}
+            </div>
+            
+            {/* Level Progress */}
+            <div className="glass rounded-xl p-4 border border-gray-700">
+              <p className="text-xs text-gray-500 mb-3">PROGRESSÃO DE NÍVEIS</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between bg-gray-800/50 rounded-lg p-2">
+                  <span className="text-gray-400">Próximo nível</span>
+                  <span className="text-cyan-400">{xpNeededForNext-xpInCurrentLevel} XP restantes</span>
+                </div>
+                <div className="flex justify-between bg-gray-800/50 rounded-lg p-2">
+                  <span className="text-gray-400">XP por nível</span>
+                  <span className="text-cyan-400">Nível × 100</span>
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-gray-500">
+                <p>LV 1→2: 100 XP | LV 2→3: 200 XP | LV 3→4: 300 XP...</p>
               </div>
             </div>
             
@@ -1123,7 +1301,7 @@ function App(){
               <p className="text-xs text-gray-500 mb-3">EBBINGHAUS</p>
               <div className="space-y-2 text-sm">{INT.map((d,i)=>(<div key={i} className="flex justify-between bg-gray-800/50 rounded-lg p-2"><span className="text-gray-400">{i+1}ª Rev</span><span className="text-cyan-400">{d}d</span></div>))}</div>
             </div>
-            <button onClick={()=>{if(window.confirm('Resetar?')){setData({items:[],xp:0,hp:100,lv:1,debt:0});setEx({hist:[],streak:0,best:0});setTasks([]);setEscalas([]);setConfig({usarPostosNovos:false});}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold">RESETAR</button>
+            <button onClick={()=>{if(window.confirm('Resetar todo o progresso?')){setData({items:[],totalXp:0,hp:100,debt:0,fisica:0,mental:0,lastStatReset:null});setEx({hist:[],streak:0,best:0});setTasks([]);setEscalas([]);setConfig({usarPostosNovos:false});}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold">RESETAR</button>
           </div>
         )}
       </div>
