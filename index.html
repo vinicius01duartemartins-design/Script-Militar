@@ -136,9 +136,9 @@ function App(){
       {id:3,subj:'Gestão Contemporânea',topic:'História da gestão',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]}
     ],
     totalXp:150,hp:100,debt:0,
-    fisica:0,    // Physical stat - resets monthly
-    mental:0,    // Mental stat - resets monthly
-    lastStatReset:null  // Track last reset date
+    fisica:0,
+    mental:0,
+    lastStatReset:'2025-1'
   });
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
   const [tasks,setTasks]=useState([
@@ -148,7 +148,25 @@ function App(){
   const [escalas,setEscalas]=useState([]);
   const [config,setConfig]=useState({usarPostosNovos:false});
 
-  useEffect(()=>{const s=localStorage.getItem('hv5');if(s){const p=JSON.parse(s);if(p.data)setData(p.data);if(p.ex)setEx(p.ex);if(p.tasks)setTasks(p.tasks);if(p.escalas)setEscalas(p.escalas);if(p.config)setConfig(p.config);}},[]);
+  useEffect(()=>{
+    const s=localStorage.getItem('hv5');
+    if(s){
+      const p=JSON.parse(s);
+      if(p.data){
+        // Ensure fisica and mental exist (migration for old data)
+        setData({
+          ...p.data,
+          fisica: p.data.fisica || 0,
+          mental: p.data.mental || 0,
+          lastStatReset: p.data.lastStatReset || null
+        });
+      }
+      if(p.ex)setEx(p.ex);
+      if(p.tasks)setTasks(p.tasks);
+      if(p.escalas)setEscalas(p.escalas);
+      if(p.config)setConfig(p.config);
+    }
+  },[]);
   useEffect(()=>{localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config]);
 
   // Check and reset monthly stats on day 1
@@ -290,7 +308,9 @@ function App(){
     reader.readAsText(file);
   };
   const hasEscala=(d)=>escalas.some(e=>e.date===d);
-  const getEscalaByDate=(d)=>escalas.find(e=>e.date===d);
+  const getEscalasByDate=(d)=>escalas.filter(e=>e.date===d); // Returns array of all escalas on that date
+  const hasGuardaOnDate=(d)=>escalas.some(e=>e.date===d&&e.tipo==='guarda');
+  const hasLimpezaOnDate=(d)=>escalas.some(e=>e.date===d&&e.tipo==='limpeza');
   const heal=(a)=>setData(p=>({...p,hp:Math.min(100,p.hp+a)}));
   const dmg=(a)=>setData(p=>{
     const h=Math.max(0,p.hp-a);
@@ -727,51 +747,59 @@ function App(){
       {/* DETALHES ESCALA MODAL */}
       {modal==='escala-detail'&&selectedEscala&&(
         <div className="modal" onClick={()=>{setModal(null);setSelectedEscala(null);}}>
-          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50" onClick={e=>e.stopPropagation()}>
+          <div className="w-full max-w-md glass rounded-2xl p-6 border border-cyan-500/50 max-h-[90vh] overflow-auto" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-orbitron text-cyan-400">DETALHES</h2>
               <button onClick={()=>{setModal(null);setSelectedEscala(null);}} className="text-gray-400 text-xl">✕</button>
             </div>
             
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold">{fmtDFull(selectedEscala.date)}</p>
-                <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-bold ${getTurmaCor(selectedEscala.turma)}`}>
-                  Turma {getTurmaNome(selectedEscala.turma)}
-                </span>
-              </div>
+            {/* selectedEscala is now an array */}
+            {Array.isArray(selectedEscala)&&selectedEscala.map((esc,idx)=>(
+              <div key={esc.id} className={`space-y-4 ${idx>0?'mt-6 pt-6 border-t border-gray-700':''}`}>
+                <div className="text-center">
+                  <p className="text-xl font-bold">{fmtDFull(esc.date)}</p>
+                  <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-bold ${getTurmaCor(esc.turma)}`}>
+                    Turma {getTurmaNome(esc.turma)}
+                  </span>
+                </div>
 
-              <div className={`rounded-xl p-4 border-2 ${selectedEscala.tipo==='guarda'?'border-amber-500 bg-amber-500/10':'border-green-500 bg-green-500/10'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedEscala.tipo==='guarda'?'bg-amber-500':'bg-green-500'}`}>
-                    <Icon name={getPostoIcon(selectedEscala.posto)} size={24} className="text-black"/>
+                <div className={`rounded-xl p-4 border-2 ${esc.tipo==='guarda'?'border-amber-500 bg-amber-500/10':'border-green-500 bg-green-500/10'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${esc.tipo==='guarda'?'bg-amber-500':'bg-green-500'}`}>
+                      <Icon name={getPostoIcon(esc.posto)} size={24} className="text-black"/>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400">{esc.tipo==='guarda'?'POSTO':'FISCAL DE LIMPEZA'}</p>
+                      <p className="text-lg font-bold">{getPostoNome(esc.posto)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400">{selectedEscala.tipo==='guarda'?'POSTO':'FISCAL DE LIMPEZA'}</p>
-                    <p className="text-lg font-bold">{getPostoNome(selectedEscala.posto)}</p>
+                </div>
+
+                {esc.tipo==='guarda'&&(
+                  <div className="bg-gray-800/50 rounded-xl p-4">
+                    <p className="text-xs text-gray-400 mb-2">QUARTO DE HORA</p>
+                    <p className="font-bold text-lg">{getQuartoInfo(esc.quarto).nome}</p>
+                    <p className="text-cyan-400 font-mono text-sm mt-1">{getQuartoInfo(esc.quarto).horarios}</p>
                   </div>
-                </div>
+                )}
+
+                {esc.obs&&(
+                  <div className="bg-gray-800/50 rounded-xl p-4">
+                    <p className="text-xs text-gray-400 mb-2">OBSERVAÇÕES</p>
+                    <p className="text-sm">{esc.obs}</p>
+                  </div>
+                )}
+
+                <button onClick={()=>{deleteEscala(esc.id);if(selectedEscala.length===1){setModal(null);setSelectedEscala(null);}else{setSelectedEscala(selectedEscala.filter(e=>e.id!==esc.id));}}} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold flex items-center justify-center gap-2">
+                  <Icon name="Trash2" size={16}/>EXCLUIR ESTA ESCALA
+                </button>
               </div>
-
-              {selectedEscala.tipo==='guarda'&&(
-                <div className="bg-gray-800/50 rounded-xl p-4">
-                  <p className="text-xs text-gray-400 mb-2">QUARTO DE HORA</p>
-                  <p className="font-bold text-lg">{getQuartoInfo(selectedEscala.quarto).nome}</p>
-                  <p className="text-cyan-400 font-mono text-sm mt-1">{getQuartoInfo(selectedEscala.quarto).horarios}</p>
-                </div>
-              )}
-
-              {selectedEscala.obs&&(
-                <div className="bg-gray-800/50 rounded-xl p-4">
-                  <p className="text-xs text-gray-400 mb-2">OBSERVAÇÕES</p>
-                  <p className="text-sm">{selectedEscala.obs}</p>
-                </div>
-              )}
-
-              <button onClick={()=>deleteEscala(selectedEscala.id)} className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-bold flex items-center justify-center gap-2">
-                <Icon name="Trash2" size={16}/>EXCLUIR ESCALA
-              </button>
-            </div>
+            ))}
+            
+            {/* Add another escala button */}
+            <button onClick={()=>{setEscForm({...escForm,date:Array.isArray(selectedEscala)?selectedEscala[0].date:selectedEscala.date});setModal('escala');}} className="w-full mt-4 py-3 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold flex items-center justify-center gap-2">
+              <Icon name="Plus" size={16}/>ADICIONAR OUTRA ESCALA NESTE DIA
+            </button>
           </div>
         </div>
       )}
@@ -946,23 +974,40 @@ function App(){
                   <div className="grid grid-cols-7 gap-1">
                     {monthDays().map((d,i)=>{
                       if(!d)return<div key={i} className="aspect-square"/>;
-                      const esc=getEscalaByDate(d.date);
+                      const escs=getEscalasByDate(d.date);
+                      const hasGuarda=escs.some(e=>e.tipo==='guarda');
+                      const hasLimpeza=escs.some(e=>e.tipo==='limpeza');
+                      const guardaEsc=escs.find(e=>e.tipo==='guarda');
                       const isToday=d.date===today();
+                      
+                      let bgClass='bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500';
+                      if(guardaEsc){
+                        bgClass=getTurmaCor(guardaEsc.turma)+' duty-day';
+                      }else if(hasLimpeza){
+                        bgClass='bg-green-600 text-white border-green-400 duty-day';
+                      }
+                      
                       return(
                         <button 
                           key={d.date} 
                           onClick={()=>{
-                            if(esc){setSelectedEscala(esc);setModal('escala-detail');}
-                            else{setEscForm({...escForm,date:d.date});setModal('escala');}
+                            if(escs.length>0){
+                              setSelectedEscala(escs);
+                              setModal('escala-detail');
+                            }else{
+                              setEscForm({...escForm,date:d.date});
+                              setModal('escala');
+                            }
                           }}
-                          className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${
-                            esc
-                              ?`${getTurmaCor(esc.turma)} duty-day`
-                              :'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500'
-                          } ${isToday?'ring-2 ring-cyan-500 ring-offset-1 ring-offset-[#0a0a0f]':''}`}
+                          className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${bgClass} ${isToday?'ring-2 ring-cyan-500 ring-offset-1 ring-offset-[#0a0a0f]':''}`}
                         >
                           <span>{d.day}</span>
-                          {esc&&<Icon name={esc.tipo==='guarda'?'Shield':'Sparkles'} size={10}/>}
+                          {escs.length>0&&(
+                            <div className="flex gap-0.5">
+                              {hasGuarda&&<Icon name="Shield" size={8}/>}
+                              {hasLimpeza&&<Icon name="Sparkles" size={8}/>}
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -1012,7 +1057,7 @@ function App(){
                   ):(
                     <div className="space-y-2">
                       {proximasEscalas.map(esc=>(
-                        <button key={esc.id} onClick={()=>{setSelectedEscala(esc);setModal('escala-detail');}} className="w-full bg-gray-800/50 rounded-lg p-3 flex items-center gap-3 text-left">
+                        <button key={esc.id} onClick={()=>{setSelectedEscala(getEscalasByDate(esc.date));setModal('escala-detail');}} className="w-full bg-gray-800/50 rounded-lg p-3 flex items-center gap-3 text-left">
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${esc.tipo==='guarda'?'bg-amber-500':'bg-green-500'}`}>
                             <Icon name={getPostoIcon(esc.posto)} size={20} className="text-black"/>
                           </div>
@@ -1021,6 +1066,7 @@ function App(){
                             <div className="flex items-center gap-2 mt-1">
                               <span className={`text-[10px] px-2 py-0.5 rounded ${getTurmaCor(esc.turma)}`}>{getTurmaNome(esc.turma)}</span>
                               {esc.tipo==='guarda'&&<span className="text-[10px] text-gray-500">{getQuartoInfo(esc.quarto).nome}</span>}
+                              {getEscalasByDate(esc.date).length>1&&<span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">+{getEscalasByDate(esc.date).length-1}</span>}
                             </div>
                           </div>
                           <div className="text-right">
