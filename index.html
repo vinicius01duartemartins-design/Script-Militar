@@ -148,48 +148,52 @@ function App(){
   const [escalas,setEscalas]=useState([]);
   const [config,setConfig]=useState({usarPostosNovos:false});
 
+  const [loaded,setLoaded]=useState(false);
+  
   useEffect(()=>{
     const s=localStorage.getItem('hv5');
     if(s){
       const p=JSON.parse(s);
       if(p.data){
-        // Preserve existing fisica and mental values, only default if undefined
-        setData({
-          items: p.data.items || [],
-          totalXp: p.data.totalXp || 0,
-          hp: p.data.hp || 100,
-          debt: p.data.debt || 0,
-          fisica: typeof p.data.fisica === 'number' ? p.data.fisica : 0,
-          mental: typeof p.data.mental === 'number' ? p.data.mental : 0,
-          lastStatReset: p.data.lastStatReset || `${getBrasiliaDate().getFullYear()}-${getBrasiliaDate().getMonth()+1}`
-        });
+        const now=getBrasiliaDate();
+        const currentMonth=`${now.getFullYear()}-${now.getMonth()+1}`;
+        const savedMonth=p.data.lastStatReset;
+        
+        // Check if we need to reset (only if saved month exists AND is different)
+        if(savedMonth && savedMonth!==currentMonth){
+          // New month - reset stats
+          setData({
+            items: p.data.items || [],
+            totalXp: p.data.totalXp || 0,
+            hp: p.data.hp || 100,
+            debt: p.data.debt || 0,
+            fisica: 0,
+            mental: 0,
+            lastStatReset: currentMonth
+          });
+          setTimeout(()=>alert('🔄 Novo mês! Stats de Física e Mental foram resetados!'),500);
+        }else{
+          // Same month or first time - preserve values
+          setData({
+            items: p.data.items || [],
+            totalXp: p.data.totalXp || 0,
+            hp: p.data.hp || 100,
+            debt: p.data.debt || 0,
+            fisica: typeof p.data.fisica === 'number' ? p.data.fisica : 0,
+            mental: typeof p.data.mental === 'number' ? p.data.mental : 0,
+            lastStatReset: savedMonth || currentMonth
+          });
+        }
       }
       if(p.ex)setEx(p.ex);
       if(p.tasks)setTasks(p.tasks);
       if(p.escalas)setEscalas(p.escalas);
       if(p.config)setConfig(p.config);
     }
+    setLoaded(true);
   },[]);
-  useEffect(()=>{localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config]);
-
-  // Check and reset monthly stats on day 1
-  useEffect(()=>{
-    const now=getBrasiliaDate();
-    const currentMonth=`${now.getFullYear()}-${now.getMonth()+1}`;
-    const isFirstDay=now.getDate()===1;
-    
-    // Only reset if:
-    // 1. We have a previous month recorded
-    // 2. The current month is different from the recorded month
-    // 3. It's actually day 1 OR we skipped day 1 (month changed but we didn't reset yet)
-    if(data.lastStatReset && data.lastStatReset!==currentMonth){
-      setData(d=>({...d,fisica:0,mental:0,lastStatReset:currentMonth}));
-      alert('🔄 Novo mês! Stats de Física e Mental foram resetados!');
-    }else if(!data.lastStatReset){
-      // First time using - just set the month without resetting
-      setData(d=>({...d,lastStatReset:currentMonth}));
-    }
-  },[data.lastStatReset]);
+  
+  useEffect(()=>{if(loaded)localStorage.setItem('hv5',JSON.stringify({data,ex,tasks,escalas,config}));},[data,ex,tasks,escalas,config,loaded]);
 
   // Check missed training days and apply punishment
   useEffect(()=>{
