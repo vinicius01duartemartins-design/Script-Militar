@@ -153,12 +153,15 @@ function App(){
     if(s){
       const p=JSON.parse(s);
       if(p.data){
-        // Ensure fisica and mental exist (migration for old data)
+        // Preserve existing fisica and mental values, only default if undefined
         setData({
-          ...p.data,
-          fisica: p.data.fisica || 0,
-          mental: p.data.mental || 0,
-          lastStatReset: p.data.lastStatReset || null
+          items: p.data.items || [],
+          totalXp: p.data.totalXp || 0,
+          hp: p.data.hp || 100,
+          debt: p.data.debt || 0,
+          fisica: typeof p.data.fisica === 'number' ? p.data.fisica : 0,
+          mental: typeof p.data.mental === 'number' ? p.data.mental : 0,
+          lastStatReset: p.data.lastStatReset || `${getBrasiliaDate().getFullYear()}-${getBrasiliaDate().getMonth()+1}`
         });
       }
       if(p.ex)setEx(p.ex);
@@ -171,19 +174,20 @@ function App(){
 
   // Check and reset monthly stats on day 1
   useEffect(()=>{
-    const currentMonth=`${getBrasiliaDate().getFullYear()}-${getBrasiliaDate().getMonth()+1}`;
-    if(data.lastStatReset!==currentMonth){
-      const isFirstDay=getBrasiliaDate().getDate()===1;
-      // Reset if it's a new month (either day 1 or first time opening in new month)
-      if(data.lastStatReset&&data.lastStatReset!==currentMonth){
-        setData(d=>({...d,fisica:0,mental:0,lastStatReset:currentMonth}));
-        if(isFirstDay){
-          alert('🔄 Novo mês! Stats de Física e Mental foram resetados!');
-        }
-      }else if(!data.lastStatReset){
-        // First time - just set the month
-        setData(d=>({...d,lastStatReset:currentMonth}));
-      }
+    const now=getBrasiliaDate();
+    const currentMonth=`${now.getFullYear()}-${now.getMonth()+1}`;
+    const isFirstDay=now.getDate()===1;
+    
+    // Only reset if:
+    // 1. We have a previous month recorded
+    // 2. The current month is different from the recorded month
+    // 3. It's actually day 1 OR we skipped day 1 (month changed but we didn't reset yet)
+    if(data.lastStatReset && data.lastStatReset!==currentMonth){
+      setData(d=>({...d,fisica:0,mental:0,lastStatReset:currentMonth}));
+      alert('🔄 Novo mês! Stats de Física e Mental foram resetados!');
+    }else if(!data.lastStatReset){
+      // First time using - just set the month without resetting
+      setData(d=>({...d,lastStatReset:currentMonth}));
     }
   },[data.lastStatReset]);
 
