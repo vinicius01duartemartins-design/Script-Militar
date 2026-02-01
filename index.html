@@ -148,16 +148,28 @@ function App(){
   });
   
   // Calculate average difficulty per subject
+  // Note: User rates 1=hard, 5=easy. We invert for display (higher = harder)
   const getSubjectDifficulty=(subj)=>{
     const items=data.items.filter(i=>i.subj===subj);
     if(items.length===0)return null;
     const totalDif=items.reduce((acc,item)=>{
-      // Consider both initial difficulty and review confidence (inverted: 5=easy, 1=hard)
-      const reviewDifs=item.revs.map(r=>6-r.c); // Invert confidence to difficulty
-      const allDifs=[item.dif||3,...reviewDifs];
+      // Invert: 1 becomes 5 (hardest), 5 becomes 1 (easiest)
+      const itemDif=item.dif?6-item.dif:3;
+      // Review confidence: 1=hard, 5=easy, so also invert
+      const reviewDifs=item.revs.map(r=>6-r.c);
+      const allDifs=[itemDif,...reviewDifs];
       return acc+allDifs.reduce((a,b)=>a+b,0)/allDifs.length;
     },0);
     return (totalDif/items.length).toFixed(1);
+  };
+  
+  // Get difficulty for a single topic (inverted: 1=hard becomes 5 for display)
+  const getTopicDifficulty=(item)=>{
+    const itemDif=item.dif?6-item.dif:3;
+    if(item.revs.length===0)return itemDif.toFixed(1);
+    const reviewDifs=item.revs.map(r=>6-r.c);
+    const allDifs=[itemDif,...reviewDifs];
+    return (allDifs.reduce((a,b)=>a+b,0)/allDifs.length).toFixed(1);
   };
   
   // Get subjects sorted by difficulty (hardest first)
@@ -700,8 +712,8 @@ function App(){
                 <input value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="Tópico *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
                 <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
                 <div>
-                  <p className="text-xs text-gray-400 mb-2">DIFICULDADE (1=fácil, 5=difícil)</p>
-                  <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-red-500':'bg-gray-800 text-gray-400'}`}>{n}★</button>)}</div>
+                  <p className="text-xs text-gray-400 mb-2">DIFICULDADE (1=difícil, 5=fácil)</p>
+                  <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?n<=2?'bg-red-500':n===3?'bg-amber-500':'bg-green-500':'bg-gray-800 text-gray-400'}`}>{n}{n===1?'🔥':n===5?'😎':''}</button>)}</div>
                 </div>
                 <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP +{getMentalGain(getTodayMentalCount())}🧠</button>
               </>}
@@ -1047,30 +1059,33 @@ function App(){
             {/* Difficulty Ranking */}
             {getSubjectsByDifficulty().length>0&&(
               <div className="glass rounded-xl p-4 border border-red-500/30 mb-4">
-                <p className="text-xs text-red-400 font-bold mb-3">🎯 RANKING DE DIFICULDADE</p>
+                <p className="text-xs text-red-400 font-bold mb-3">🎯 RANKING DE DIFICULDADE (Matérias mais difíceis)</p>
                 <div className="space-y-2">
-                  {getSubjectsByDifficulty().slice(0,5).map((s,idx)=>(
-                    <div key={s.name} className="flex items-center gap-2">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx===0?'bg-red-500':idx===1?'bg-orange-500':idx===2?'bg-amber-500':'bg-gray-600'}`}>{idx+1}</span>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium truncate">{s.name}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="flex">
-                          {[1,2,3,4,5].map(n=>(
-                            <span key={n} className={`text-xs ${n<=Math.round(s.dif)?'text-red-400':'text-gray-600'}`}>★</span>
-                          ))}
+                  {getSubjectsByDifficulty().slice(0,5).map((s,idx)=>{
+                    const difVal=parseFloat(s.dif);
+                    return(
+                      <div key={s.name} className="flex items-center gap-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx===0?'bg-red-500':idx===1?'bg-orange-500':idx===2?'bg-amber-500':'bg-gray-600'}`}>{idx+1}</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium truncate">{s.name}</p>
                         </div>
-                        <span className="text-xs text-gray-400 w-8">{s.dif}</span>
+                        <div className="flex items-center gap-1">
+                          <div className="flex">
+                            {[1,2,3,4,5].map(n=>(
+                              <span key={n} className={`text-xs ${n<=Math.round(difVal)?difVal>=4?'text-red-400':difVal>=3?'text-amber-400':'text-green-400':'text-gray-600'}`}>★</span>
+                            ))}
+                          </div>
+                          <span className={`text-xs w-8 font-bold ${difVal>=4?'text-red-400':difVal>=3?'text-amber-400':'text-green-400'}`}>{s.dif}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <p className="text-[9px] text-gray-500 mt-2">Baseado na dificuldade informada + confiança nas revisões</p>
+                <p className="text-[9px] text-gray-500 mt-2">1=fácil → 5=difícil | Baseado na dificuldade + confiança nas revisões</p>
               </div>
             )}
             
-            {SUBJ.map(s=>{const its=data.items.filter(i=>i.subj===s);const exp=selSubj===s;const dif=getSubjectDifficulty(s);return(
+            {SUBJ.map(s=>{const its=data.items.filter(i=>i.subj===s).sort((a,b)=>parseFloat(getTopicDifficulty(b))-parseFloat(getTopicDifficulty(a)));const exp=selSubj===s;const dif=getSubjectDifficulty(s);return(
               <div key={s} className={`glass rounded-xl border overflow-hidden ${its.length?'border-gray-700':'border-gray-800 opacity-50'}`}>
                 <button onClick={()=>its.length&&setSelSubj(exp?null:s)} className="w-full p-4 flex items-center justify-between text-left" disabled={!its.length}>
                   <div className="flex-1">
@@ -1079,8 +1094,9 @@ function App(){
                   </div>
                   {dif&&(
                     <div className="flex items-center gap-1 mr-2">
+                      <span className={`text-xs font-bold ${parseFloat(dif)>=4?'text-red-400':parseFloat(dif)>=3?'text-amber-400':'text-green-400'}`}>{dif}</span>
                       {[1,2,3,4,5].map(n=>(
-                        <span key={n} className={`text-[10px] ${n<=Math.round(dif)?'text-red-400':'text-gray-600'}`}>★</span>
+                        <span key={n} className={`text-[10px] ${n<=Math.round(parseFloat(dif))?parseFloat(dif)>=4?'text-red-400':parseFloat(dif)>=3?'text-amber-400':'text-green-400':'text-gray-600'}`}>★</span>
                       ))}
                     </div>
                   )}
@@ -1088,20 +1104,26 @@ function App(){
                 </button>
                 {exp&&its.length>0&&(
                   <div className="border-t border-gray-800 p-3 space-y-2">
-                    {its.map(it=>(
-                      <div key={it.id} className="bg-gray-800/50 rounded-lg p-3">
-                        <div className="flex justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{it.topic}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] text-gray-500">{fmtD(it.date)} • {it.revs.length} rev</span>
-                              {it.dif&&<span className="text-[10px] text-red-400">Dif: {it.dif}/5</span>}
+                    <p className="text-[10px] text-gray-500 mb-2">Ordenado por dificuldade (mais difícil primeiro)</p>
+                    {its.map(it=>{
+                      const topicDif=parseFloat(getTopicDifficulty(it));
+                      return(
+                        <div key={it.id} className={`bg-gray-800/50 rounded-lg p-3 border-l-4 ${topicDif>=4?'border-red-500':topicDif>=3?'border-amber-500':'border-green-500'}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{it.topic}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-[10px] text-gray-500">{fmtD(it.date)} • {it.revs.length} rev</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${topicDif>=4?'bg-red-500/20 text-red-400':topicDif>=3?'bg-amber-500/20 text-amber-400':'bg-green-500/20 text-green-400'}`}>
+                                  Dif: {topicDif.toFixed(1)} {topicDif>=4?'🔥':topicDif>=3?'⚡':'😎'}
+                                </span>
+                              </div>
                             </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded h-fit ${daysTo(it.next)<0?'bg-red-500/20 text-red-400':'bg-blue-500/20 text-blue-400'}`}>{daysTo(it.next)<0?'Atrasada':`${daysTo(it.next)}d`}</span>
                           </div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded h-fit ${daysTo(it.next)<0?'bg-red-500/20 text-red-400':'bg-blue-500/20 text-blue-400'}`}>{daysTo(it.next)<0?'Atrasada':`${daysTo(it.next)}d`}</span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
