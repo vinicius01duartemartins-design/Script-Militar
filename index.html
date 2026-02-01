@@ -2,8 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a0f">
   <title>HUNTER SYSTEM</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='2' result='coloredBlur'/%3E%3CfeMerge%3E%3CfeMergeNode in='coloredBlur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Crect fill='%230a0a0f' width='100' height='100' rx='20'/%3E%3Cpath d='M50 15 C25 15 15 35 15 50 C15 60 20 70 25 75 L25 85 L75 85 L75 75 C80 70 85 60 85 50 C85 35 75 15 50 15 Z' fill='none' stroke='%2300ff88' stroke-width='3' filter='url(%23glow)'/%3E%3Cpath d='M30 45 L70 45' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Ccircle cx='35' cy='55' r='8' fill='none' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Ccircle cx='65' cy='55' r='8' fill='none' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Cpath d='M45 70 L55 70' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='2' result='coloredBlur'/%3E%3CfeMerge%3E%3CfeMergeNode in='coloredBlur'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Crect fill='%230a0a0f' width='100' height='100' rx='20'/%3E%3Cpath d='M50 15 C25 15 15 35 15 50 C15 60 20 70 25 75 L25 85 L75 85 L75 75 C80 70 85 60 85 50 C85 35 75 15 50 15 Z' fill='none' stroke='%2300ff88' stroke-width='3' filter='url(%23glow)'/%3E%3Cpath d='M30 45 L70 45' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Ccircle cx='35' cy='55' r='8' fill='none' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Ccircle cx='65' cy='55' r='8' fill='none' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3Cpath d='M45 70 L55 70' stroke='%2300ff88' stroke-width='2' filter='url(%23glow)'/%3E%3C/svg%3E">
+  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22HUNTER%20SYSTEM%22%2C%22short_name%22%3A%22HUNTER%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0a0f%22%2C%22theme_color%22%3A%22%230a0a0f%22%7D">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -131,15 +137,37 @@ function App(){
 
   const [data,setData]=useState({
     items:[
-      {id:1,subj:'Direito Penal',topic:'Aula 1 - Cap Matta',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]},
-      {id:2,subj:'Didática',topic:'Aula 1 Cap Mathias',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]},
-      {id:3,subj:'Gestão Contemporânea',topic:'História da gestão',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[]}
+      {id:1,subj:'Direito Penal',topic:'Aula 1 - Cap Matta',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[],dif:3},
+      {id:2,subj:'Didática',topic:'Aula 1 Cap Mathias',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[],dif:3},
+      {id:3,subj:'Gestão Contemporânea',topic:'História da gestão',date:'2025-01-24',stage:0,next:'2025-01-25',revs:[],dif:3}
     ],
     totalXp:150,hp:100,debt:0,
     fisica:0,
     mental:0,
     lastStatReset:'2025-1'
   });
+  
+  // Calculate average difficulty per subject
+  const getSubjectDifficulty=(subj)=>{
+    const items=data.items.filter(i=>i.subj===subj);
+    if(items.length===0)return null;
+    const totalDif=items.reduce((acc,item)=>{
+      // Consider both initial difficulty and review confidence (inverted: 5=easy, 1=hard)
+      const reviewDifs=item.revs.map(r=>6-r.c); // Invert confidence to difficulty
+      const allDifs=[item.dif||3,...reviewDifs];
+      return acc+allDifs.reduce((a,b)=>a+b,0)/allDifs.length;
+    },0);
+    return (totalDif/items.length).toFixed(1);
+  };
+  
+  // Get subjects sorted by difficulty (hardest first)
+  const getSubjectsByDifficulty=()=>{
+    return SUBJ.map(s=>({
+      name:s,
+      dif:getSubjectDifficulty(s),
+      count:data.items.filter(i=>i.subj===s).length
+    })).filter(s=>s.dif!==null).sort((a,b)=>b.dif-a.dif);
+  };
   const [ex,setEx]=useState({hist:[],streak:0,best:0});
   const [tasks,setTasks]=useState([
     {id:1,title:'Organizar armário',desc:'',deadline:'2025-01-25',priority:'alta',done:false,penalized:false,createdAt:Date.now()},
@@ -260,23 +288,62 @@ function App(){
     return()=>clearInterval(interval);
   },[]);
 
-  // Brasilia timezone (UTC-3)
+  // Brasilia timezone (UTC-3) - Fixed date handling
   const getBrasiliaDate=()=>{
     const now=new Date();
-    const brasilia=new Date(now.toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
-    return brasilia;
+    // Force Brasilia timezone
+    const options={timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'};
+    const parts=now.toLocaleDateString('en-CA',options).split('-');
+    return new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]),12,0,0);
   };
   const today=()=>{
     const d=getBrasiliaDate();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
-  const addD=(d,n)=>{const dt=new Date(d+'T12:00:00');dt.setDate(dt.getDate()+n);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;};
-  const fmtD=(d)=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
-  const fmtDFull=(d)=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
+  const addD=(d,n)=>{
+    const [y,m,day]=d.split('-').map(Number);
+    const dt=new Date(y,m-1,day,12,0,0);
+    dt.setDate(dt.getDate()+n);
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+  };
+  const fmtD=(d)=>{
+    const [y,m,day]=d.split('-').map(Number);
+    const dt=new Date(y,m-1,day);
+    return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  };
+  const fmtDFull=(d)=>{
+    const [y,m,day]=d.split('-').map(Number);
+    const dt=new Date(y,m-1,day);
+    return dt.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
+  };
   const daysTo=(d)=>{
-    const target=new Date(d+'T12:00:00');
-    const now=new Date(today()+'T12:00:00');
+    const [y1,m1,d1]=d.split('-').map(Number);
+    const [y2,m2,d2]=today().split('-').map(Number);
+    const target=new Date(y1,m1-1,d1,12,0,0);
+    const now=new Date(y2,m2-1,d2,12,0,0);
     return Math.round((target-now)/86400000);
+  };
+  
+  // Fixed monthDays to properly handle calendar grid
+  const monthDays=()=>{
+    const y=month.getFullYear();
+    const m=month.getMonth();
+    const firstDay=new Date(y,m,1);
+    const lastDay=new Date(y,m+1,0);
+    const daysInMonth=lastDay.getDate();
+    const startDayOfWeek=firstDay.getDay(); // 0=Sunday
+    
+    const days=[];
+    // Add empty cells for days before the 1st
+    for(let i=0;i<startDayOfWeek;i++){
+      days.push(null);
+    }
+    // Add all days of the month
+    for(let i=1;i<=daysInMonth;i++){
+      const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+      days.push({day:i,date:dateStr});
+    }
+    return days;
   };
   
   // Backup functions
@@ -338,15 +405,45 @@ function App(){
   // Training rewards/punishments config
   const TRAIN_REWARD_XP=40;
   const TRAIN_REWARD_HP=15;
-  const TRAIN_REWARD_FISICA=10;  // Physical stat gain
+  const TRAIN_REWARD_FISICA=10;  // Physical stat gain (fixed per day)
   const STUDY_REWARD_XP=50;
   const STUDY_REWARD_HP=10;
-  const STUDY_REWARD_MENTAL=10;  // Mental stat gain
   const REVIEW_REWARD_XP=40;
   const REVIEW_REWARD_HP=5;
-  const REVIEW_REWARD_MENTAL=5;  // Mental stat gain
   const MISS_TRAIN_XP=30;
   const MISS_TRAIN_HP=15;
+  
+  // Mental stat uses diminishing returns (square root)
+  // This balances the fact that you study more times per day than you train
+  // Formula: totalMentalToday = 10 × √(activities_today)
+  // So: 1 activity = 10, 2 = 14, 3 = 17, 4 = 20, 5 = 22...
+  const getMentalGain=(activitiesTodayBefore)=>{
+    const before=Math.floor(10*Math.sqrt(activitiesTodayBefore));
+    const after=Math.floor(10*Math.sqrt(activitiesTodayBefore+1));
+    return after-before; // Marginal gain for this activity
+  };
+  
+  // Count today's mental activities (studies + reviews done today)
+  const getTodayMentalCount=()=>{
+    const t=today();
+    const studiesT=data.items.filter(i=>i.date===t).length;
+    const reviewsT=data.items.reduce((acc,i)=>acc+i.revs.filter(r=>r.d===t).length,0);
+    return studiesT+reviewsT;
+  };
+  
+  // Calculate balanced stats (now should be more equal)
+  const getBalancedStats=()=>{
+    const fisica=data.fisica||0;
+    const mental=data.mental||0;
+    const total=fisica+mental;
+    if(total===0)return{fisica:50,mental:50,balance:'equilibrado'};
+    const fisicaPct=Math.round((fisica/total)*100);
+    const mentalPct=100-fisicaPct;
+    let balance='equilibrado';
+    if(fisicaPct>=60)balance='foco_fisica';
+    else if(mentalPct>=60)balance='foco_mental';
+    return{fisica:fisicaPct,mental:mentalPct,balance,raw:{fisica,mental}};
+  };
   
   // Computed level values
   const currentLevel=getLevelFromTotalXp(data.totalXp);
@@ -365,6 +462,7 @@ function App(){
     if(!form.topic||!form.mins||!newSubj)return;
     const t=today();
     const oldLevel=currentLevel;
+    const mentalGain=getMentalGain(getTodayMentalCount());
     setData(p=>{
       const newTotalXp=p.totalXp+STUDY_REWARD_XP;
       const newLevel=getLevelFromTotalXp(newTotalXp);
@@ -373,10 +471,10 @@ function App(){
       }
       return{
         ...p,
-        items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[]},...p.items],
+        items:[{id:Date.now(),subj:newSubj,topic:form.topic,date:t,stage:0,next:addD(t,INT[0]),revs:[],dif:form.conf},...p.items],
         totalXp:newTotalXp,
         hp:Math.min(100,p.hp+STUDY_REWARD_HP),
-        mental:p.mental+STUDY_REWARD_MENTAL
+        mental:p.mental+mentalGain
       };
     });
     setForm({topic:'',mins:'',conf:3});
@@ -389,6 +487,7 @@ function App(){
     const ns=selRev.stage+1;
     const ni=ns<INT.length?INT[ns]:45;
     const oldLevel=currentLevel;
+    const mentalGain=getMentalGain(getTodayMentalCount());
     setData(p=>{
       const newTotalXp=p.totalXp+REVIEW_REWARD_XP;
       const newLevel=getLevelFromTotalXp(newTotalXp);
@@ -400,7 +499,7 @@ function App(){
         items:p.items.map(i=>i.id===selRev.id?{...i,stage:ns,next:addD(t,ni),revs:[...i.revs,{d:t,c:form.conf}]}:i),
         totalXp:newTotalXp,
         hp:Math.min(100,p.hp+REVIEW_REWARD_HP),
-        mental:p.mental+REVIEW_REWARD_MENTAL
+        mental:p.mental+mentalGain
       };
     });
     setForm({topic:'',mins:'',conf:3});
@@ -418,7 +517,7 @@ function App(){
   };
 
   const togEx=(d)=>{
-    if(hasEscala(d))return;
+    // Allow training even on duty days (just won't be punished for not training)
     let h=[...ex.hist];
     const i=h.findIndex(x=>x.d===d);
     let xc=0;
@@ -442,11 +541,16 @@ function App(){
       fisicaChange=TRAIN_REWARD_FISICA;
     }
     
-    // Calculate streak
+    // Calculate streak (duty days don't break streak)
     let s=0;
     for(let j=0;j<100;j++){
       const dd=addD(today(),-j);
-      if(hasEscala(dd))continue;
+      if(hasEscala(dd)){
+        // Check if trained on duty day (bonus!)
+        const trained=h.find(x=>x.d===dd);
+        if(trained?.ok)s++;
+        continue; // Don't break streak on duty days
+      }
       const e=h.find(x=>x.d===dd);
       if(e?.ok)s++;
       else break;
@@ -513,7 +617,6 @@ function App(){
     return`${days} dias`;
   };
 
-  const monthDays=()=>{const y=month.getFullYear(),m=month.getMonth();const f=new Date(y,m,1),l=new Date(y,m+1,0);const d=[];for(let i=0;i<f.getDay();i++)d.push(null);for(let i=1;i<=l.getDate();i++)d.push({day:i,date:new Date(y,m,i).toISOString().split('T')[0]});return d;};
   
   // Escala functions
   const addEscala=()=>{
@@ -596,8 +699,11 @@ function App(){
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3"><p className="text-cyan-400 font-bold">{newSubj}</p><p className="text-xs text-gray-500">1d→7d→15d→30d→45d</p></div>
                 <input value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="Tópico *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
                 <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
-                <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-cyan-500':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
-                <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP +10🧠</button>
+                <div>
+                  <p className="text-xs text-gray-400 mb-2">DIFICULDADE (1=fácil, 5=difícil)</p>
+                  <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-red-500':'bg-gray-800 text-gray-400'}`}>{n}★</button>)}</div>
+                </div>
+                <button onClick={addStudy} disabled={!form.topic||!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-cyan-600 to-blue-600 disabled:opacity-50">REGISTRAR +50 XP +{getMentalGain(getTodayMentalCount())}🧠</button>
               </>}
             </div>
           </div>
@@ -615,8 +721,11 @@ function App(){
             </div>
             <div className="space-y-4">
               <input type="number" value={form.mins} onChange={e=>setForm({...form,mins:e.target.value})} placeholder="Minutos *" className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3"/>
-              <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-amber-500 text-black':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
-              <button onClick={doReview} disabled={!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-amber-500 to-orange-500 text-black disabled:opacity-50">COMPLETAR +40 XP +5🧠</button>
+              <div>
+                <p className="text-xs text-gray-400 mb-2">CONFIANÇA (1=difícil, 5=fácil)</p>
+                <div className="flex gap-2">{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setForm({...form,conf:n})} className={`flex-1 py-2 rounded-lg font-bold ${form.conf===n?'bg-amber-500 text-black':'bg-gray-800 text-gray-400'}`}>{n}</button>)}</div>
+              </div>
+              <button onClick={doReview} disabled={!form.mins} className="w-full py-4 rounded-xl font-orbitron bg-gradient-to-r from-amber-500 to-orange-500 text-black disabled:opacity-50">COMPLETAR +40 XP +{getMentalGain(getTodayMentalCount())}🧠</button>
             </div>
           </div>
         </div>
@@ -855,28 +964,32 @@ function App(){
                 <div className="w-full bg-gray-800/50 rounded-full h-2.5 border border-red-500/30"><div className={`hp-bar h-full rounded-full transition-all ${data.hp<=20?'animate-pulse':''}`} style={{width:`${data.hp}%`}}/></div>
               </div>
               
-              {/* Monthly Stats */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-orange-400">💪 FÍSICA</span>
-                    <span className="text-orange-400 font-bold">{data.fisica||0}</span>
-                  </div>
-                  <div className="w-full bg-gray-800 rounded-full h-1.5">
-                    <div className="bg-gradient-to-r from-orange-500 to-red-500 h-full rounded-full transition-all" style={{width:`${Math.min(100,(data.fisica||0))}%`}}/>
-                  </div>
+              {/* Monthly Stats - Balanced */}
+              <div className="mt-4 bg-gray-800/50 rounded-xl p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] text-gray-400">EQUILÍBRIO MENSAL</span>
+                  <span className="text-[10px] text-gray-500">Reseta dia 1</span>
                 </div>
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-blue-400">🧠 MENTAL</span>
-                    <span className="text-blue-400 font-bold">{data.mental||0}</span>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-orange-400 text-xs">💪</span>
+                  <div className="flex-1 h-4 bg-gray-700 rounded-full overflow-hidden flex">
+                    <div className="bg-gradient-to-r from-orange-500 to-orange-400 h-full transition-all flex items-center justify-end pr-1" style={{width:`${getBalancedStats().fisica}%`}}>
+                      {getBalancedStats().fisica>15&&<span className="text-[8px] font-bold">{getBalancedStats().fisica}%</span>}
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-400 to-blue-500 h-full transition-all flex items-center pl-1" style={{width:`${getBalancedStats().mental}%`}}>
+                      {getBalancedStats().mental>15&&<span className="text-[8px] font-bold">{getBalancedStats().mental}%</span>}
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-800 rounded-full h-1.5">
-                    <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-full rounded-full transition-all" style={{width:`${Math.min(100,(data.mental||0))}%`}}/>
-                  </div>
+                  <span className="text-blue-400 text-xs">🧠</span>
+                </div>
+                <div className="flex justify-between text-[9px]">
+                  <span className="text-orange-400">Física: {data.fisica||0} pts</span>
+                  <span className={`font-bold ${getBalancedStats().balance==='equilibrado'?'text-green-400':getBalancedStats().balance==='foco_fisica'?'text-orange-400':'text-blue-400'}`}>
+                    {getBalancedStats().balance==='equilibrado'?'⚖️ Equilibrado':getBalancedStats().balance==='foco_fisica'?'⚠️ Foco em Física':'⚠️ Foco em Mental'}
+                  </span>
+                  <span className="text-blue-400">Mental: {data.mental||0} pts</span>
                 </div>
               </div>
-              <p className="text-[9px] text-gray-500 text-center mt-2">📅 Stats resetam dia 1 de cada mês</p>
               
               {data.hp<=20&&<p className="text-red-500 text-[10px] mt-2 animate-pulse">⚠ HP CRÍTICO - Estude ou treine para recuperar!</p>}
               
@@ -890,7 +1003,7 @@ function App(){
             </div>
 
             <button onClick={()=>setModal('study')} className="w-full py-4 rounded-xl font-orbitron font-bold bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center gap-2">
-              <Icon name="Plus" size={20}/> NOVO ESTUDO <span className="text-cyan-200 text-sm">+50 XP +10🧠</span>
+              <Icon name="Plus" size={20}/> NOVO ESTUDO <span className="text-cyan-200 text-sm">+50 XP</span>
             </button>
 
             {pend.length>0&&(
@@ -930,18 +1043,63 @@ function App(){
         {tab==='materias'&&(
           <div className="space-y-3">
             <h1 className="text-xl font-orbitron font-bold mb-4">MATÉRIAS</h1>
-            {SUBJ.map(s=>{const its=data.items.filter(i=>i.subj===s);const exp=selSubj===s;return(
+            
+            {/* Difficulty Ranking */}
+            {getSubjectsByDifficulty().length>0&&(
+              <div className="glass rounded-xl p-4 border border-red-500/30 mb-4">
+                <p className="text-xs text-red-400 font-bold mb-3">🎯 RANKING DE DIFICULDADE</p>
+                <div className="space-y-2">
+                  {getSubjectsByDifficulty().slice(0,5).map((s,idx)=>(
+                    <div key={s.name} className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx===0?'bg-red-500':idx===1?'bg-orange-500':idx===2?'bg-amber-500':'bg-gray-600'}`}>{idx+1}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium truncate">{s.name}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="flex">
+                          {[1,2,3,4,5].map(n=>(
+                            <span key={n} className={`text-xs ${n<=Math.round(s.dif)?'text-red-400':'text-gray-600'}`}>★</span>
+                          ))}
+                        </div>
+                        <span className="text-xs text-gray-400 w-8">{s.dif}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-gray-500 mt-2">Baseado na dificuldade informada + confiança nas revisões</p>
+              </div>
+            )}
+            
+            {SUBJ.map(s=>{const its=data.items.filter(i=>i.subj===s);const exp=selSubj===s;const dif=getSubjectDifficulty(s);return(
               <div key={s} className={`glass rounded-xl border overflow-hidden ${its.length?'border-gray-700':'border-gray-800 opacity-50'}`}>
                 <button onClick={()=>its.length&&setSelSubj(exp?null:s)} className="w-full p-4 flex items-center justify-between text-left" disabled={!its.length}>
-                  <div><p className="font-bold text-sm">{s}</p><p className="text-[10px] text-gray-500">{its.length?`${its.length} tópicos`:'Não iniciada'}</p></div>
+                  <div className="flex-1">
+                    <p className="font-bold text-sm">{s}</p>
+                    <p className="text-[10px] text-gray-500">{its.length?`${its.length} tópicos`:'Não iniciada'}</p>
+                  </div>
+                  {dif&&(
+                    <div className="flex items-center gap-1 mr-2">
+                      {[1,2,3,4,5].map(n=>(
+                        <span key={n} className={`text-[10px] ${n<=Math.round(dif)?'text-red-400':'text-gray-600'}`}>★</span>
+                      ))}
+                    </div>
+                  )}
                   {its.length>0&&<Icon name="ChevronDown" size={16} className={`text-gray-500 transition-transform ${exp?'rotate-180':''}`}/>}
                 </button>
                 {exp&&its.length>0&&(
                   <div className="border-t border-gray-800 p-3 space-y-2">
                     {its.map(it=>(
                       <div key={it.id} className="bg-gray-800/50 rounded-lg p-3">
-                        <div className="flex justify-between"><div><p className="font-medium text-sm">{it.topic}</p><p className="text-[10px] text-gray-500">{fmtD(it.date)} • {it.revs.length} rev</p></div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded ${daysTo(it.next)<0?'bg-red-500/20 text-red-400':'bg-blue-500/20 text-blue-400'}`}>{daysTo(it.next)<0?'Atrasada':`${daysTo(it.next)}d`}</span></div>
+                        <div className="flex justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{it.topic}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-gray-500">{fmtD(it.date)} • {it.revs.length} rev</span>
+                              {it.dif&&<span className="text-[10px] text-red-400">Dif: {it.dif}/5</span>}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded h-fit ${daysTo(it.next)<0?'bg-red-500/20 text-red-400':'bg-blue-500/20 text-blue-400'}`}>{daysTo(it.next)<0?'Atrasada':`${daysTo(it.next)}d`}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1185,11 +1343,22 @@ function App(){
           <div className="space-y-4">
             <h1 className="text-xl font-orbitron font-bold">TREINO</h1>
             <div className="glass rounded-xl p-6 border border-gray-700 text-center">
-              <p className="text-xs text-gray-500 mb-3">HOJE</p>
-              <button onClick={()=>togEx(today())} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${hasEscala(today())?'bg-purple-600/30 border-2 border-purple-500':ex.hist.find(h=>h.d===today())?.ok?'bg-green-500':'bg-gray-800 border-2 border-dashed border-gray-600'}`}>
-                {hasEscala(today())?<Icon name="Shield" size={32} className="text-purple-400"/>:ex.hist.find(h=>h.d===today())?.ok?<Icon name="Check" size={32}/>:<Icon name="Plus" size={32} className="text-gray-500"/>}
+              <p className="text-xs text-gray-500 mb-3">HOJE {hasEscala(today())&&<span className="text-purple-400">(SERVIÇO)</span>}</p>
+              <button onClick={()=>togEx(today())} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
+                ex.hist.find(h=>h.d===today())?.ok
+                  ?'bg-green-500'
+                  :hasEscala(today())
+                    ?'bg-purple-600/30 border-2 border-dashed border-purple-500'
+                    :'bg-gray-800 border-2 border-dashed border-gray-600'
+              }`}>
+                {ex.hist.find(h=>h.d===today())?.ok
+                  ?<Icon name="Check" size={32}/>
+                  :hasEscala(today())
+                    ?<Icon name="Plus" size={32} className="text-purple-400"/>
+                    :<Icon name="Plus" size={32} className="text-gray-500"/>
+                }
               </button>
-              <p className="mt-3 font-bold">{hasEscala(today())?'SERVIÇO':ex.hist.find(h=>h.d===today())?.ok?'COMPLETO':'MARCAR'}</p>
+              <p className="mt-3 font-bold">{ex.hist.find(h=>h.d===today())?.ok?'COMPLETO':hasEscala(today())?'SERVIÇO (pode treinar!)':'MARCAR'}</p>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="glass rounded-xl p-3 border border-gray-800 text-center"><p className="text-2xl font-bold text-orange-400">{ex.streak}🔥</p><p className="text-[10px] text-gray-500">STREAK</p></div>
@@ -1199,9 +1368,23 @@ function App(){
             <div className="glass rounded-xl p-4 border border-gray-700">
               <p className="text-xs text-gray-500 mb-3">30 DIAS</p>
               <div className="grid grid-cols-7 gap-1">
-                {last30().map(d=>(
-                  <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${d.duty?'bg-purple-600/50 text-purple-300 border border-purple-500':d.ok?'bg-green-500 text-white':'bg-gray-800 text-gray-500'} ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
-                ))}
+                {last30().map(d=>{
+                  const trained=ex.hist.find(h=>h.d===d.d)?.ok;
+                  const onDuty=d.duty;
+                  return(
+                    <button key={d.d} onClick={()=>togEx(d.d)} className={`aspect-square rounded text-[10px] font-bold ${
+                      trained&&onDuty?'bg-green-500 text-white ring-2 ring-purple-500':
+                      trained?'bg-green-500 text-white':
+                      onDuty?'bg-purple-600/50 text-purple-300 border border-purple-500':
+                      'bg-gray-800 text-gray-500'
+                    } ${d.d===today()?'ring-2 ring-cyan-500':''}`}>{d.day}</button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-3 mt-3 text-[9px] text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500"></span>Treinou</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-600/50 border border-purple-500"></span>Serviço</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500 ring-2 ring-purple-500"></span>Treinou no serviço</span>
               </div>
             </div>
             
@@ -1211,7 +1394,7 @@ function App(){
               <div className="space-y-1 text-xs">
                 <p className="text-green-400">✓ Treinou: +{TRAIN_REWARD_XP} XP | +{TRAIN_REWARD_HP} HP | +{TRAIN_REWARD_FISICA} 💪</p>
                 <p className="text-red-400">✗ Não treinou: -{MISS_TRAIN_XP} XP | -{MISS_TRAIN_HP} HP</p>
-                <p className="text-purple-400">🛡 Serviço: Dia ignorado (sem punição)</p>
+                <p className="text-purple-400">🛡 Serviço: Sem punição, mas pode treinar e ganhar pontos!</p>
               </div>
             </div>
           </div>
@@ -1311,11 +1494,34 @@ function App(){
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
                   <p className="text-3xl font-bold text-blue-400">{data.mental||0}</p>
                   <p className="text-xs text-blue-300 mt-1">🧠 MENTAL</p>
-                  <p className="text-[10px] text-gray-500 mt-1">+{STUDY_REWARD_MENTAL} estudo | +{REVIEW_REWARD_MENTAL} rev</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Rendimento decrescente</p>
                 </div>
               </div>
-              {(data.fisica||0)>(data.mental||0)*1.5&&<p className="text-[10px] text-orange-400 mt-2 text-center">⚠️ Foco maior em treino! Equilibre com estudos.</p>}
-              {(data.mental||0)>(data.fisica||0)*1.5&&<p className="text-[10px] text-blue-400 mt-2 text-center">⚠️ Foco maior em estudo! Equilibre com treinos.</p>}
+              
+              {/* Diminishing returns explanation */}
+              <div className="mt-3 bg-gray-800/50 rounded-lg p-3">
+                <p className="text-[10px] text-gray-400 mb-2">📊 SISTEMA DE EQUILÍBRIO (Raiz Quadrada)</p>
+                <div className="grid grid-cols-2 gap-2 text-[9px]">
+                  <div>
+                    <p className="text-orange-400 font-bold">💪 Física</p>
+                    <p className="text-gray-500">1 treino = +10 pts</p>
+                  </div>
+                  <div>
+                    <p className="text-blue-400 font-bold">🧠 Mental (por dia)</p>
+                    <p className="text-gray-500">1º estudo = +10 pts</p>
+                    <p className="text-gray-500">2º estudo = +4 pts</p>
+                    <p className="text-gray-500">3º estudo = +3 pts</p>
+                    <p className="text-gray-500">4º estudo = +3 pts</p>
+                  </div>
+                </div>
+                <p className="text-[9px] text-cyan-400 mt-2">Assim, 1 treino ≈ 2-3 estudos em valor!</p>
+              </div>
+              
+              {getBalancedStats().balance!=='equilibrado'&&(
+                <p className={`text-[10px] mt-2 text-center ${getBalancedStats().balance==='foco_fisica'?'text-orange-400':'text-blue-400'}`}>
+                  ⚠️ {getBalancedStats().balance==='foco_fisica'?'Foco maior em treino! Equilibre com estudos.':'Foco maior em estudo! Equilibre com treinos.'}
+                </p>
+              )}
             </div>
             
             {/* Level Progress */}
